@@ -1,0 +1,237 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/router-config/v1",
+  "title": "RouterConfig v1",
+  "description": "Schema-v1 Router configuration. Contains secret references only, never secret values. Canonical enforcement is implemented in Router.Configuration; this file is the machine-readable contract documentation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "version",
+    "mode",
+    "local_router",
+    "clients",
+    "protocol_routes",
+    "provider_routes",
+    "model_routes",
+    "routes",
+    "policies",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "mode": { "enum": ["direct", "router"] },
+    "local_router": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "host", "port", "client_auth", "limits", "thread_selection"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "host": { "const": "127.0.0.1" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "client_auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "token_ref"],
+          "properties": {
+            "mode": { "const": "bearer_env_ref" },
+            "token_ref": { "pattern": "^[A-Z][A-Z0-9_]{2,127}$" }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max_request_bytes", "max_header_bytes", "max_connections", "shutdown_grace_ms"],
+          "properties": {
+            "max_request_bytes": { "type": "integer", "minimum": 1, "maximum": 268435456 },
+            "max_header_bytes": { "type": "integer", "minimum": 1, "maximum": 1048576 },
+            "max_connections": { "type": "integer", "minimum": 1, "maximum": 1024 },
+            "shutdown_grace_ms": { "type": "integer", "minimum": 1, "maximum": 120000 }
+          }
+        },
+        "thread_selection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "pending_ttl_ms", "active_idle_ttl_ms"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "pending_ttl_ms": { "type": "integer", "minimum": 30000, "maximum": 1800000 },
+            "active_idle_ttl_ms": { "type": "integer", "minimum": 3600000, "maximum": 604800000 },
+            "quota_failover_enabled": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "clients": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["client_id", "adapter_id", "enabled", "auth_scope", "version"],
+        "properties": {
+          "client_id": { "type": "string", "pattern": "^client\\.[a-z0-9_]+$" },
+          "adapter_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "enabled": { "type": "boolean" },
+          "auth_scope": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "allowed_route_ids": { "type": "array", "items": { "type": "string" } },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "protocol_routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocol_route_id", "ingress_protocol", "upstream_protocol", "adapter_id", "adapter_version", "loss_policy", "version"],
+        "properties": {
+          "protocol_route_id": { "type": "string", "pattern": "^protocol-route\\.[a-z0-9-]+$" },
+          "ingress_protocol": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "upstream_protocol": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "adapter_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "adapter_version": { "type": "string", "minLength": 1, "maxLength": 32 },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "loss_policy": { "const": "fail_closed" },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "provider_routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider_route_id", "provider_id", "adapter_id", "adapter_version", "enabled", "version"],
+        "properties": {
+          "provider_route_id": { "type": "string", "pattern": "^provider-route\\.[a-z0-9-]+$" },
+          "provider_id": { "type": "string", "enum": ["chatgpt", "mm_openai_api", "mm_modelstudio", "mm_openrouter", "mm_mimo", "deepseek"] },
+          "adapter_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "adapter_version": { "type": "string", "minLength": 1, "maxLength": 32 },
+          "endpoint_ids": { "type": "array", "items": { "type": "string" } },
+          "secret_ref": { "$ref": "secret-reference/v1" },
+          "base_url_ref": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["endpoint_id", "base_url_ref", "enabled", "data_boundary", "tls_required", "priority", "weight", "version"],
+        "properties": {
+          "endpoint_id": { "type": "string", "pattern": "^endpoint\\.[a-z0-9-]+$" },
+          "base_url_ref": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "enabled": { "type": "boolean" },
+          "data_boundary": { "enum": ["provider-default", "residency-required", "no-store"] },
+          "tls_required": { "type": "boolean" },
+          "priority": { "type": "integer", "minimum": 0 },
+          "weight": { "type": "integer", "minimum": 0 },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "model_routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["model_route_id", "provider_id", "client_model_id", "model_id", "upstream_model_id", "identity_verification", "enabled", "version"],
+        "properties": {
+          "model_route_id": { "type": "string", "pattern": "^model-route\\.[a-z0-9-]+$" },
+          "provider_id": { "type": "string", "enum": ["chatgpt", "mm_openai_api", "mm_modelstudio", "mm_openrouter", "mm_mimo", "deepseek"] },
+          "client_model_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "model_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "upstream_model_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "aliases": { "type": "array", "items": { "type": "string" } },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "pricing_ref": { "type": "string" },
+          "identity_verification": { "const": "explicit_config" },
+          "enabled": { "type": "boolean" },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["route_id", "provider_route_id", "protocol_route_id", "model_route_id", "enabled", "priority", "weight", "health_state", "timeout_policy_id", "retry_policy_id", "failover_policy_id", "created_at", "updated_at", "version"],
+        "properties": {
+          "route_id": { "type": "string", "pattern": "^route\\.[a-z0-9-]+$" },
+          "client_ids": { "type": "array", "items": { "type": "string" } },
+          "provider_route_id": { "type": "string" },
+          "protocol_route_id": { "type": "string" },
+          "model_route_id": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "priority": { "type": "integer", "minimum": 0 },
+          "weight": { "type": "integer", "minimum": 0 },
+          "health_state": { "enum": ["UNKNOWN", "HEALTHY", "DEGRADED", "UNHEALTHY", "DISABLED"] },
+          "timeout_policy_id": { "type": "string" },
+          "retry_policy_id": { "type": "string" },
+          "failover_policy_id": { "type": "string" },
+          "fallback_route_ids": { "type": "array", "items": { "type": "string" } },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "policies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["policy_id", "version"],
+        "properties": {
+          "policy_id": { "type": "string", "pattern": "^policy\\.[a-z0-9-]+$" },
+          "version": { "type": "integer", "minimum": 1 },
+          "retry": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "max_attempts", "base_delay_ms", "max_delay_ms", "jitter", "respect_retry_after", "max_retry_after_ms"],
+            "properties": {
+              "schema_version": { "const": 1 },
+              "max_attempts": { "type": "integer", "minimum": 1, "maximum": 10 },
+              "base_delay_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+              "max_delay_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+              "jitter": { "type": "number", "minimum": 0, "maximum": 1 },
+              "respect_retry_after": { "type": "boolean" },
+              "max_retry_after_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 }
+            }
+          },
+          "timeout": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "connect_timeout_ms", "first_byte_timeout_ms", "idle_timeout_ms", "attempt_timeout_ms", "total_timeout_ms"],
+            "properties": {
+              "schema_version": { "const": 1 },
+              "connect_timeout_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+              "first_byte_timeout_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+              "idle_timeout_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+              "attempt_timeout_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+              "total_timeout_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 }
+            }
+          },
+          "failover": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "allow_same_model_alternate_endpoint", "allow_same_model_alternate_provider"],
+            "properties": {
+              "schema_version": { "const": 1 },
+              "allow_same_model_alternate_endpoint": { "type": "boolean" },
+              "allow_same_model_alternate_provider": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

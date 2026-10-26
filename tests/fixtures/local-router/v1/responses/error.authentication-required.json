@@ -1,0 +1,10 @@
+{
+  "error": {
+    "type": "router_error",
+    "code": "authentication_required",
+    "message": "Authentication is required.",
+    "param": null,
+    "request_id": "req_00000000-0000-7000-8000-000000000903",
+    "retryable": false
+  }
+}

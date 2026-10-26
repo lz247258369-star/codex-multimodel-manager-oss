@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/responses-event/v1",
+  "title": "Responses V1 canonical SSE event",
+  "description": "Canonical SSE event payload (event name plus JSON data). Framing is produced by the ingress SSE writer; data is serialized compactly.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_.-]{1,64}$"
+    },
+    "response": { "type": "object" },
+    "item": { "type": "object" },
+    "output_index": { "type": "integer" },
+    "content_index": { "type": "integer" },
+    "item_id": { "type": "string" },
+    "delta": { "type": "string" },
+    "text": { "type": "string" },
+    "code": { "type": "string" },
+    "message": { "type": "string" },
+    "request_id": { "type": "string" }
+  }
+}

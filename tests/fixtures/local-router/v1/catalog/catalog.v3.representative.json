@@ -1,0 +1,125 @@
+{
+  "version": 3,
+  "price_basis": "USD per 1M tokens",
+  "price_note": "Reference API pricing only.",
+  "providers": [
+    {
+      "id": "chatgpt",
+      "label": "OpenAI / ChatGPT",
+      "env_key": "",
+      "models": [
+        {
+          "id": "gpt-5.6-sol",
+          "label": "GPT-5.6 Sol",
+          "brand": "OpenAI",
+          "vendor": "OpenAI",
+          "family": "GPT-5.6",
+          "variant": "Sol",
+          "performance_levels": ["low", "medium", "high", "xhigh"],
+          "price_input": 5.0,
+          "price_output": 30.0,
+          "price_currency": "USD",
+          "price_source": "OpenAI API pricing",
+          "price_updated_at": "2026-08-25",
+          "status": "official"
+        }
+      ]
+    },
+    {
+      "id": "modelstudio",
+      "label": "阿里云百炼（Qwen / DeepSeek）",
+      "env_key": "CODEX_DASHSCOPE_API_KEY",
+      "models": [
+        {
+          "id": "qwen3-coder-plus",
+          "label": "Qwen3 Coder Plus",
+          "brand": "Qwen",
+          "vendor": "Alibaba / Qwen",
+          "family": "Qwen3 Coder",
+          "variant": "Plus",
+          "performance_levels": ["low", "medium", "high"],
+          "price_input": null,
+          "price_output": null,
+          "price_currency": "USD",
+          "price_source": "provider-dynamic",
+          "price_updated_at": null,
+          "status": "verified"
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "label": "DeepSeek V4 Pro",
+          "brand": "DeepSeek",
+          "vendor": "DeepSeek",
+          "family": "DeepSeek V4",
+          "variant": "Pro",
+          "performance_levels": ["low", "medium", "high"],
+          "price_input": null,
+          "price_output": null,
+          "price_currency": "USD",
+          "price_source": "provider-dynamic",
+          "price_updated_at": null,
+          "status": "verified"
+        }
+      ]
+    },
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "env_key": "OPENROUTER_API_KEY",
+      "models": [
+        {
+          "id": "z-ai/glm-5.3",
+          "label": "GLM 5.3",
+          "brand": "Z.ai / GLM",
+          "vendor": "Z.ai",
+          "family": "GLM",
+          "variant": "5.3",
+          "performance_levels": ["low", "medium", "high"],
+          "price_input": null,
+          "price_output": null,
+          "price_currency": "USD",
+          "price_source": "OpenRouter-live",
+          "price_updated_at": null,
+          "status": "credit"
+        },
+        {
+          "id": "stealth/ox-alpha",
+          "label": "Ox Alpha（实验）",
+          "brand": "Stealth",
+          "vendor": "Stealth / Unknown",
+          "family": "Ox Alpha",
+          "variant": "Experimental",
+          "performance_levels": ["low", "medium", "high", "xhigh"],
+          "price_input": null,
+          "price_output": null,
+          "price_currency": "USD",
+          "price_source": "OpenRouter-live",
+          "price_updated_at": null,
+          "status": "experimental"
+        }
+      ]
+    },
+    {
+      "id": "mimo",
+      "label": "Xiaomi MiMo",
+      "env_key": "MIMO_API_KEY",
+      "models": [
+        {
+          "id": "mimo-v2.5-pro",
+          "label": "MiMo V2.5 Pro",
+          "brand": "MiMo",
+          "vendor": "Xiaomi",
+          "family": "MiMo V2.5",
+          "variant": "Pro",
+          "performance_levels": ["low", "medium", "high"],
+          "price_input": null,
+          "price_output": null,
+          "price_currency": "USD",
+          "price_source": "provider-dynamic",
+          "price_updated_at": null,
+          "status": "credit"
+        }
+      ]
+    }
+  ]
+}

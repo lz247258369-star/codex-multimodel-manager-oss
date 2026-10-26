@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-thread-capture/v1",
+  "title": "HS-1B thread identity capture",
+  "description": "Identity-discovery capture window. A capture carries no target model and changes no selection; the capture owner is never exposed.",
+  "oneOf": [
+    {
+      "title": "capture projection",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "capture_token", "status", "created_at", "expires_at", "thread_ref", "captured_at"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "capture_token": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "status": { "enum": ["open", "captured", "expired", "cancelled", "unknown"] },
+        "created_at": { "type": "string" },
+        "expires_at": { "type": "string" },
+        "thread_ref": { "type": ["string", "null"] },
+        "captured_at": { "type": ["string", "null"] }
+      }
+    },
+    {
+      "title": "capture cancel result",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "result", "capture_token", "status"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "result": { "const": "applied" },
+        "capture_token": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "status": { "const": "cancelled" }
+      }
+    }
+  ]
+}

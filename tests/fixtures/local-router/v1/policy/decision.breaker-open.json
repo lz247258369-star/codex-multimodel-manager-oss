@@ -1,0 +1,6 @@
+{
+  "admitted": false,
+  "state": "Open",
+  "reason_code": "breaker_open",
+  "note": "Synthetic breaker decision fixture; no content or secrets."
+}

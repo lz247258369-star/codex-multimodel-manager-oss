@@ -1,0 +1,12 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_00000000-0000-7000-8000-000000000601","object":"response","status":"in_progress","model":"synthetic-model-v1","output":[]}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"id":"rs_00000000-0000-7000-8000-000000000602","type":"reasoning","summary":[]}}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_00000000-0000-7000-8000-000000000602","type":"reasoning","summary":[{"type":"summary_text","text":"Synthetic reasoning summary."}]}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_00000000-0000-7000-8000-000000000601","object":"response","status":"completed","model":"synthetic-model-v1","output":[]}}
+

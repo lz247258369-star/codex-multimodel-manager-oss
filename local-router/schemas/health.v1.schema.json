@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/health/v1",
+  "title": "Public health",
+  "description": "Unauthenticated minimal health payload. Fixed fields only; never exposes routes, providers, models, paths, errors, or secrets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "lifecycle", "ready"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "lifecycle": { "enum": ["STOPPED", "STARTING", "READY", "DEGRADED", "STOPPING", "FAILED"] },
+    "ready": { "type": "boolean" }
+  }
+}

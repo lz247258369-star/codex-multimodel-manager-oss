@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.ThreadSelection</RootNamespace>
+    <AssemblyName>Router.ThreadSelection</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Router.Core\Router.Core.csproj" />
+  </ItemGroup>
+</Project>

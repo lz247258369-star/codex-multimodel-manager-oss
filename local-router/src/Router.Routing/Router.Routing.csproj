@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.Routing</RootNamespace>
+    <AssemblyName>Router.Routing</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Router.Core\Router.Core.csproj" />
+    <ProjectReference Include="..\Router.Registries\Router.Registries.csproj" />
+  </ItemGroup>
+</Project>

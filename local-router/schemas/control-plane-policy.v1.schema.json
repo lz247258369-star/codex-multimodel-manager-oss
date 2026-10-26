@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-policy/v1",
+  "title": "LR-14P policy read projection",
+  "description": "Versioned policy snapshot distinguishing configured vs effective. Absent bodies are effective safe defaults; cross-model fallback is structurally HARD OFF.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "config_generation", "cross_model_fallback", "policies", "routes", "circuit_breaker"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "config_generation": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "cross_model_fallback": { "const": "HARD_OFF" },
+    "policies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["policy_id", "version", "effective_retry", "effective_timeout", "effective_failover", "effective_retry_source", "effective_timeout_source", "effective_failover_source"],
+        "properties": {
+          "policy_id": { "type": "string", "pattern": "^policy\\.[a-z0-9-]+$" },
+          "version": { "type": "integer", "minimum": 1 },
+          "configured_retry": { "type": ["object", "null"] },
+          "configured_timeout": { "type": ["object", "null"] },
+          "configured_failover": { "type": ["object", "null"] },
+          "effective_retry": { "type": "object" },
+          "effective_timeout": { "type": "object" },
+          "effective_failover": { "type": "object" },
+          "effective_retry_source": { "enum": ["configured", "safe_defaults"] },
+          "effective_timeout_source": { "enum": ["configured", "safe_defaults"] },
+          "effective_failover_source": { "enum": ["configured", "safe_defaults"] }
+        }
+      }
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["route_id", "timeout_policy_id", "retry_policy_id", "failover_policy_id"],
+        "properties": {
+          "route_id": { "type": "string" },
+          "timeout_policy_id": { "type": "string" },
+          "retry_policy_id": { "type": "string" },
+          "failover_policy_id": { "type": "string" }
+        }
+      }
+    },
+    "circuit_breaker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effective_state", "mutation_available", "reason_code"],
+      "properties": {
+        "effective_state": { "const": "disabled" },
+        "configured": { "type": ["string", "null"] },
+        "mutation_available": { "const": false },
+        "reason_code": { "const": "CIRCUIT_BREAKER_POLICY_CONFIGURATION_GAP" }
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+[
+  { "provider_id": "mm_modelstudio", "model_id": "qwen3-coder-plus" },
+  { "provider_id": "mm_openrouter", "model_id": "z-ai/glm-5.3" },
+  { "provider_id": "mm_mimo", "model_id": "mimo-v2.5-pro" },
+  { "provider_id": "mm_openai_api", "model_id": "gpt-5.6-sol" },
+  { "provider_id": "deepseek", "model_id": "deepseek-chat" },
+  { "provider_id": "deepseek", "model_id": "deepseek-flash" },
+  { "provider_id": "deepseek", "model_id": "deepseek-v4-pro" }
+]

@@ -1,0 +1,14 @@
+{
+  "route_id": "route.openrouter-glm53",
+  "client_id": "client.codex_cli",
+  "provider_route_id": "provider-route.openrouter-primary",
+  "protocol_route_id": "protocol-route.responses-pass-through",
+  "model_route_id": "model-route.glm53-openrouter",
+  "endpoint_id": "endpoint.openrouter-primary",
+  "effective_capabilities": ["reasoning", "streaming", "text", "tools", "usage"],
+  "timeout_policy_id": "policy.timeout-default",
+  "retry_policy_id": "policy.retry-safe-default",
+  "failover_policy_id": "policy.failover-off",
+  "pricing_snapshot_id": "pricing.mm_openrouter.z-ai-glm-5-3",
+  "secret_ref_name": "OPENROUTER_API_KEY"
+}

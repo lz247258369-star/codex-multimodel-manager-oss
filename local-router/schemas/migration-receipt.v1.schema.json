@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/migration-receipt/v1",
+  "title": "MigrationReceipt v1",
+  "description": "Schema-v1 migration receipt. Contains safe metadata and hashes only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "migration_id", "from_version", "to_version", "source_sha256", "target_sha256", "status", "completed_at"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "migration_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "from_version": { "type": "integer", "minimum": 0 },
+    "to_version": { "type": "integer", "minimum": 1 },
+    "source_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "target_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "status": { "enum": ["completed", "rolled_back", "failed"] },
+    "backup_receipt_id": { "type": ["string", "null"] },
+    "rollback_receipt_id": { "type": ["string", "null"] },
+    "error_code": { "type": ["string", "null"] },
+    "completed_at": { "type": "string", "format": "date-time" }
+  }
+}

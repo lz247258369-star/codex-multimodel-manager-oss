@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/responses-response/v1",
+  "title": "Responses V1 canonical non-stream response",
+  "description": "Canonical synthetic or normalized Responses V1 non-stream response emitted by the LR-3 ingress.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "object", "created_at", "status", "model", "output"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^resp_[0-9a-f-]{36}$" },
+    "object": { "const": "response" },
+    "created_at": { "type": "integer", "minimum": 0 },
+    "status": { "enum": ["completed", "failed"] },
+    "model": { "type": "string" },
+    "output": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": { "enum": ["message", "reasoning", "function_call"] },
+          "id": { "type": "string" },
+          "role": { "enum": ["assistant"] },
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "text"],
+              "properties": {
+                "type": { "const": "output_text" },
+                "text": { "type": "string" },
+                "annotations": { "type": "array" }
+              }
+            }
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "text"],
+              "properties": {
+                "type": { "const": "summary_text" },
+                "text": { "type": "string" }
+              }
+            }
+          },
+          "call_id": { "type": "string" },
+          "name": { "type": "string" },
+          "arguments": { "type": "string" }
+        }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": { "type": "integer" },
+        "output_tokens": { "type": "integer" },
+        "total_tokens": { "type": "integer" },
+        "cached_tokens": { "type": "integer" },
+        "reasoning_tokens": { "type": "integer" }
+      }
+    },
+    "error_code": { "type": "string" },
+    "error_message": { "type": "string" }
+  }
+}

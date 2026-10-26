@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-thread-selection-clear-all/v1",
+  "title": "HS-1B clear-all thread runtime state",
+  "description": "Explicitly confirmed clear-all request and result. Clearing runtime remnants never changes local_router.enabled, thread_selection.enabled, the config generation, routes, or policies.",
+  "oneOf": [
+    {
+      "title": "clear-all request",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "confirm"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "confirm": { "const": true }
+      }
+    },
+    {
+      "title": "clear-all result",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "result", "cleared_count", "cancelled_capture_count", "thread_selection_enabled"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "result": { "const": "applied" },
+        "cleared_count": { "type": "integer", "minimum": 0 },
+        "cancelled_capture_count": { "type": "integer", "minimum": 0 },
+        "thread_selection_enabled": { "type": "boolean" }
+      }
+    }
+  ]
+}

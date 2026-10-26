@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-03T00:00:00Z",
+  "routes": [
+    {
+      "provider_route_id": "provider-route.synthetic",
+      "endpoint_id": "endpoint.synthetic",
+      "model_route_id": "model-route.synthetic",
+      "state": "HEALTHY",
+      "reason_code": "healthy",
+      "failure_count": 0,
+      "success_count": 2
+    }
+  ]
+}

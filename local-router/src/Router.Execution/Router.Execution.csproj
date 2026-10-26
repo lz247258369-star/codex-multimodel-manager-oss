@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.Execution</RootNamespace>
+    <AssemblyName>Router.Execution</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Router.CircuitBreaker\Router.CircuitBreaker.csproj" />
+    <ProjectReference Include="..\Router.ClientAdapters.Responses\Router.ClientAdapters.Responses.csproj" />
+    <ProjectReference Include="..\Router.Core\Router.Core.csproj" />
+    <ProjectReference Include="..\Router.Health\Router.Health.csproj" />
+    <ProjectReference Include="..\Router.Policies\Router.Policies.csproj" />
+    <ProjectReference Include="..\Router.ProtocolAdapters.Abstractions\Router.ProtocolAdapters.Abstractions.csproj" />
+    <ProjectReference Include="..\Router.ProtocolAdapters.Responses\Router.ProtocolAdapters.Responses.csproj" />
+    <ProjectReference Include="..\Router.ProviderAdapters.Abstractions\Router.ProviderAdapters.Abstractions.csproj" />
+    <ProjectReference Include="..\Router.ProviderAdapters.DeepSeek\Router.ProviderAdapters.DeepSeek.csproj" />
+    <ProjectReference Include="..\Router.ProviderAdapters.MiMo\Router.ProviderAdapters.MiMo.csproj" />
+    <ProjectReference Include="..\Router.ProviderAdapters.ModelStudio\Router.ProviderAdapters.ModelStudio.csproj" />
+    <ProjectReference Include="..\Router.ProviderAdapters.OpenAI\Router.ProviderAdapters.OpenAI.csproj" />
+    <ProjectReference Include="..\Router.ProviderAdapters.OpenRouter\Router.ProviderAdapters.OpenRouter.csproj" />
+    <ProjectReference Include="..\Router.ProviderAdapters.Responses\Router.ProviderAdapters.Responses.csproj" />
+    <ProjectReference Include="..\Router.Registries\Router.Registries.csproj" />
+    <ProjectReference Include="..\Router.Routing\Router.Routing.csproj" />
+    <ProjectReference Include="..\Router.Secrets\Router.Secrets.csproj" />
+    <ProjectReference Include="..\Router.UpstreamHttp\Router.UpstreamHttp.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Router.Execution.Tests" />
+  </ItemGroup>
+</Project>

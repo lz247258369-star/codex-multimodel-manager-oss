@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.ProviderAdapters.Abstractions</RootNamespace>
+    <AssemblyName>Router.ProviderAdapters.Abstractions</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Router.ClientAdapters.Responses\Router.ClientAdapters.Responses.csproj" />
+    <ProjectReference Include="..\Router.Core\Router.Core.csproj" />
+    <ProjectReference Include="..\Router.Registries\Router.Registries.csproj" />
+    <ProjectReference Include="..\Router.Routing\Router.Routing.csproj" />
+    <ProjectReference Include="..\Router.Secrets\Router.Secrets.csproj" />
+  </ItemGroup>
+</Project>

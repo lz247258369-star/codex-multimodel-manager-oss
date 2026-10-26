@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "input_cost": 0.005,
+  "output_cost": 0.015,
+  "cached_cost": null,
+  "reasoning_cost": null,
+  "total_cost": 0.02,
+  "currency": "USD",
+  "pricing_snapshot_version": "installer/model-catalog.json:v3@1",
+  "pricing_source": "synthetic-pricing",
+  "effective_at": "2026-08-01T00:00:00Z",
+  "status": "Complete",
+  "estimated": true
+}

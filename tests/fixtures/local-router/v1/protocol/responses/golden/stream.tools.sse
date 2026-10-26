@@ -1,0 +1,9 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_protocol_tool","status":"in_progress","model":"synthetic-model-v1"}}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"id":"call_protocol_1","type":"function_call","name":"synthetic_weather","arguments":"{\"city\":\"shanghai\"}","call_id":"call_protocol_1"}}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_protocol_tool","status":"completed","model":"synthetic-model-v1"}}
+

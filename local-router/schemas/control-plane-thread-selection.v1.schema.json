@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-thread-selection/v1",
+  "title": "HS-1B single thread selection read",
+  "description": "Read projection of one observed thread's model selection. The thread is addressed only by its external reference.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "thread_ref", "client_id", "selection_state", "selection_model", "selection_generation", "selection_issued_at", "selection_expires_at", "requested_model", "last_selected_model", "last_failure_code", "last_failure_at"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "thread_ref": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+    "client_id": { "type": "string" },
+    "selection_state": { "enum": ["none", "pending", "active", "superseded", "cleared", "expired", "unknown"] },
+    "selection_model": { "type": ["string", "null"] },
+    "selection_generation": { "type": "integer", "minimum": 0 },
+    "selection_issued_at": { "type": ["string", "null"] },
+    "selection_expires_at": { "type": ["string", "null"] },
+    "requested_model": { "type": ["string", "null"] },
+    "last_selected_model": { "type": ["string", "null"] },
+    "last_failure_code": { "type": ["string", "null"] },
+    "last_failure_at": { "type": ["string", "null"] }
+  }
+}

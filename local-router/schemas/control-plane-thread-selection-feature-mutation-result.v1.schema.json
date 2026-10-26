@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-thread-selection-feature-mutation-result/v1",
+  "title": "HS-1B thread-selection capability mutation result",
+  "description": "Applied capability state after a live publication. configured_enabled is durable config; effective_enabled also requires local_router.enabled and the runtime store state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "result", "config_generation", "configured_enabled", "effective_enabled"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "result": { "const": "applied" },
+    "config_generation": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "configured_enabled": { "type": "boolean" },
+    "effective_enabled": { "type": "boolean" }
+  }
+}

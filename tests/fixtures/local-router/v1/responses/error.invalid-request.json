@@ -1,0 +1,10 @@
+{
+  "error": {
+    "type": "router_error",
+    "code": "invalid_request",
+    "message": "model is required.",
+    "param": "model",
+    "request_id": "req_00000000-0000-7000-8000-000000000901",
+    "retryable": false
+  }
+}

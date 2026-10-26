@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-policy-mutation-result/v1",
+  "title": "LR-14P policy mutation result",
+  "description": "Applied policy mutation snapshot with the new config generation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "result_code", "policy_id", "config_generation", "cross_model_fallback", "policy"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "result_code": { "const": "applied" },
+    "policy_id": { "type": "string" },
+    "config_generation": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "cross_model_fallback": { "const": "HARD_OFF" },
+    "policy": { "type": "object" }
+  }
+}

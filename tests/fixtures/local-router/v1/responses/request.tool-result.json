@@ -1,0 +1,17 @@
+{
+  "model": "synthetic-model-v1",
+  "input": [
+    {
+      "type": "function_call",
+      "call_id": "call_synthetic_1",
+      "name": "synthetic_weather",
+      "arguments": "{\"city\":\"shanghai\"}"
+    },
+    {
+      "type": "function_call_output",
+      "call_id": "call_synthetic_1",
+      "output": "{\"temperature\":22}"
+    }
+  ],
+  "stream": false
+}

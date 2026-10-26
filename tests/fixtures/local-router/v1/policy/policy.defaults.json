@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "retry": {
+    "max_attempts": 2,
+    "base_delay_ms": 200,
+    "max_delay_ms": 5000,
+    "jitter": 0.2,
+    "respect_retry_after": true,
+    "max_retry_after_ms": 30000
+  },
+  "timeout": {
+    "connect_ms": 10000,
+    "first_byte_ms": 30000,
+    "idle_ms": 60000,
+    "attempt_ms": 300000,
+    "total_ms": 600000
+  },
+  "failover": {
+    "enabled": false,
+    "allow_same_model_alternate_endpoint": false,
+    "allow_same_model_alternate_provider": false,
+    "allow_cross_model_fallback": false
+  },
+  "circuit_breaker": {
+    "enabled": false
+  },
+  "note": "Synthetic deterministic policy defaults fixture."
+}

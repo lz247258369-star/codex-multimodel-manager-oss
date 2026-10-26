@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.Execution.Tests</RootNamespace>
+    <AssemblyName>Router.Execution.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- CA1707 conflicts with the standard xUnit snake_case naming convention. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Router.ClientAdapters.Responses\Router.ClientAdapters.Responses.csproj" />
+    <ProjectReference Include="..\..\src\Router.Configuration\Router.Configuration.csproj" />
+    <ProjectReference Include="..\..\src\Router.Core\Router.Core.csproj" />
+    <ProjectReference Include="..\..\src\Router.Execution\Router.Execution.csproj" />
+    <ProjectReference Include="..\..\src\Router.Host\Router.Host.csproj" />
+    <ProjectReference Include="..\..\src\Router.Ingress\Router.Ingress.csproj" />
+    <ProjectReference Include="..\..\src\Router.Metering\Router.Metering.csproj" />
+    <ProjectReference Include="..\..\src\Router.Secrets\Router.Secrets.csproj" />
+    <ProjectReference Include="..\..\src\Router.ThreadSelection\Router.ThreadSelection.csproj" />
+    <ProjectReference Include="..\ProviderContractKit\ProviderContractKit.csproj" />
+    <ProjectReference Include="..\Router.FakeProvider\Router.FakeProvider.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\..\tests\fixtures\local-router\v1\**">
+      <Link>fixtures\local-router\v1\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+</Project>

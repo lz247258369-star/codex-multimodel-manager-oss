@@ -1,0 +1,10 @@
+{
+  "error": {
+    "type": "router_error",
+    "code": "unsupported_parameter",
+    "message": "A requested parameter is not supported by this route.",
+    "param": "temperature",
+    "request_id": "req_00000000-0000-7000-8000-000000000902",
+    "retryable": false
+  }
+}

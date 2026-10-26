@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.ProtocolAdapters.Responses</RootNamespace>
+    <AssemblyName>Router.ProtocolAdapters.Responses</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Router.ClientAdapters.Responses\Router.ClientAdapters.Responses.csproj" />
+    <ProjectReference Include="..\Router.Core\Router.Core.csproj" />
+    <ProjectReference Include="..\Router.ProtocolAdapters.Abstractions\Router.ProtocolAdapters.Abstractions.csproj" />
+    <ProjectReference Include="..\Router.Registries\Router.Registries.csproj" />
+  </ItemGroup>
+</Project>

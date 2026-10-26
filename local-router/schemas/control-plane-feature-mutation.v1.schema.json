@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-feature-mutation/v1",
+  "title": "LR-14P Local Router feature mutation",
+  "description": "Strict generation-aware feature mutation that only changes local_router.enabled (and the coupled mode marker required by schema v1). It never claims process Start/Stop.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "expected_generation", "enabled"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "expected_generation": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "enabled": { "type": "boolean" }
+  }
+}

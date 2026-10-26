@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-thread-selection-mutation/v1",
+  "title": "HS-1B thread selection mutation",
+  "description": "Compare-and-set against the PER-THREAD selection generation (never the config generation). Model must be statically approved for the observed thread's client.",
+  "oneOf": [
+    {
+      "title": "set selection",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "expected_generation", "model"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "expected_generation": { "type": "integer", "minimum": 0 },
+        "model": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    {
+      "title": "clear selection",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "expected_generation"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "expected_generation": { "type": "integer", "minimum": 0 }
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "resp_00000000-0000-7000-8000-000000000201",
+  "object": "response",
+  "created_at": 1780000000,
+  "status": "completed",
+  "model": "synthetic-model-v1",
+  "output": [
+    {
+      "type": "reasoning",
+      "id": "rs_00000000-0000-7000-8000-000000000202",
+      "summary": [
+        { "type": "summary_text", "text": "Synthetic reasoning summary." }
+      ]
+    },
+    {
+      "type": "message",
+      "id": "msg_00000000-0000-7000-8000-000000000203",
+      "role": "assistant",
+      "content": [
+        { "type": "output_text", "text": "Synthetic reasoned answer.", "annotations": [] }
+      ]
+    }
+  ]
+}

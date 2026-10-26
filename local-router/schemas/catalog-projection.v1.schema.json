@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/catalog-projection/v1",
+  "title": "RouterCatalogProjection v1",
+  "description": "Read-only projection of the canonical installer/model-catalog.json (schema v3). The catalog remains the single source of truth; this projection is metadata only, never a second catalog. Identity is never inferred and aliases are never invented.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "catalog_version",
+    "source_version",
+    "models"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "catalog_version": { "const": 3 },
+    "source_version": { "const": "installer/model-catalog.json:v3" },
+    "source_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "price_basis": { "type": ["string", "null"] },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "provider_id",
+          "catalog_provider_id",
+          "model_id",
+          "client_model_id",
+          "status",
+          "availability_tier",
+          "metadata_ref",
+          "source_version",
+          "aliases"
+        ],
+        "properties": {
+          "provider_id": { "type": "string" },
+          "catalog_provider_id": { "type": "string" },
+          "catalog_provider_label": { "type": ["string", "null"] },
+          "env_key_reference": { "type": ["string", "null"] },
+          "model_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "client_model_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "label": { "type": ["string", "null"] },
+          "brand": { "type": ["string", "null"] },
+          "vendor": { "type": ["string", "null"] },
+          "family": { "type": ["string", "null"] },
+          "variant": { "type": ["string", "null"] },
+          "performance_levels": { "type": "array", "items": { "type": "string" } },
+          "status": { "type": "string" },
+          "availability_tier": { "enum": ["Available", "Configured", "Caution", "Unknown"] },
+          "price_input": { "type": ["number", "null"] },
+          "price_output": { "type": ["number", "null"] },
+          "price_currency": { "type": ["string", "null"] },
+          "price_source": { "type": ["string", "null"] },
+          "price_updated_at": { "type": ["string", "null"] },
+          "price_basis": { "type": ["string", "null"] },
+          "metadata_ref": { "type": "string" },
+          "source_version": { "type": "string" },
+          "source_sha256": { "type": ["string", "null"] },
+          "aliases": { "type": "array", "maxItems": 0 }
+        }
+      }
+    }
+  }
+}

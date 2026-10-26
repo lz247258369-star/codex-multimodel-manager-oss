@@ -1,0 +1,5 @@
+{
+  "model": "synthetic-model-v1",
+  "input": "Synthetic input.",
+  "background": true
+}

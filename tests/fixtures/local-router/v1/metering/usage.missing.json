@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "request_id": "req_missing_usage",
+  "provider_id": "mm_openrouter",
+  "model_id": "z-ai/glm-5.3",
+  "input_tokens": null,
+  "output_tokens": null,
+  "total_tokens": null,
+  "cached_tokens": null,
+  "reasoning_tokens": null,
+  "estimated": false,
+  "source": "provider_response"
+}

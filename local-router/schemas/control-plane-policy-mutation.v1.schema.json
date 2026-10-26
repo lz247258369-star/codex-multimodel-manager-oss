@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-policy-mutation/v1",
+  "title": "LR-14P policy mutation",
+  "description": "Strict generation-aware policy mutation. Exactly one typed body is supplied; unknown fields and cross-model fallback are rejected by the schema/parser.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "expected_generation", "policy_id"],
+  "oneOf": [
+    { "required": ["retry"] },
+    { "required": ["timeout"] },
+    { "required": ["failover"] }
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "expected_generation": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "policy_id": { "type": "string", "pattern": "^policy\\.[a-z0-9-]+$" },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "max_attempts", "base_delay_ms", "max_delay_ms", "jitter", "respect_retry_after", "max_retry_after_ms"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "max_attempts": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "base_delay_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+        "max_delay_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+        "jitter": { "type": "number", "minimum": 0, "maximum": 1 },
+        "respect_retry_after": { "type": "boolean" },
+        "max_retry_after_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 }
+      }
+    },
+    "timeout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "connect_timeout_ms", "first_byte_timeout_ms", "idle_timeout_ms", "attempt_timeout_ms", "total_timeout_ms"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "connect_timeout_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+        "first_byte_timeout_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+        "idle_timeout_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+        "attempt_timeout_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 },
+        "total_timeout_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 }
+      }
+    },
+    "failover": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "allow_same_model_alternate_endpoint", "allow_same_model_alternate_provider"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "allow_same_model_alternate_endpoint": { "type": "boolean" },
+        "allow_same_model_alternate_provider": { "type": "boolean" }
+      }
+    }
+  }
+}

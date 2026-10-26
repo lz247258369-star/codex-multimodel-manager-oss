@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "providers": [
+    {
+      "id": "mystery-provider",
+      "label": "Unknown",
+      "models": [
+        {
+          "id": "mystery-1",
+          "status": "official"
+        }
+      ]
+    }
+  ]
+}

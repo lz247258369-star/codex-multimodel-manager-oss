@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.Metering</RootNamespace>
+    <AssemblyName>Router.Metering</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Router.CatalogProjection\Router.CatalogProjection.csproj" />
+    <ProjectReference Include="..\Router.ClientAdapters.Responses\Router.ClientAdapters.Responses.csproj" />
+    <ProjectReference Include="..\Router.Core\Router.Core.csproj" />
+  </ItemGroup>
+</Project>

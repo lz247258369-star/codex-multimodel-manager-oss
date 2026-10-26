@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-feature-mutation-result/v1",
+  "title": "LR-14P feature mutation result",
+  "description": "Applied feature mutation result. Enable never implies Running; lifecycle Start/Stop remains unavailable in LR-14P.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "result_code", "local_router_enabled", "config_generation", "start_stop_available", "lifecycle_reason_code"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "result_code": { "const": "applied" },
+    "local_router_enabled": { "type": "boolean" },
+    "config_generation": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "start_stop_available": { "const": false },
+    "lifecycle_reason_code": { "const": "LIFECYCLE_CONTROL_GAP" }
+  }
+}

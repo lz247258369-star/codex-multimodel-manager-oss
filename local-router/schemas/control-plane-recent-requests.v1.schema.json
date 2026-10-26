@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-recent-requests/v1",
+  "title": "LR-14P bounded recent-request projection",
+  "description": "Bounded safe recent-request read over the Router-owned durable log. Only safe operational metadata is present; payload, body, prompt, response, headers, secrets, endpoint URLs, and paths are absent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scope", "record_count", "degraded", "degradation_codes", "records"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "scope": { "const": "router_owned_durable_recent" },
+    "record_count": { "type": "integer", "minimum": 0 },
+    "degraded": { "type": "boolean" },
+    "degradation_codes": { "type": "array", "items": { "type": "string" } },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "request_id", "trace_id", "started_at", "completed_at", "duration_ms", "terminal_state"],
+        "properties": {
+          "schema_version": { "const": 1 },
+          "request_id": { "type": "string" },
+          "trace_id": { "type": "string" },
+          "client_id": { "type": ["string", "null"] },
+          "route_id": { "type": ["string", "null"] },
+          "provider_id": { "type": ["string", "null"] },
+          "protocol_id": { "type": ["string", "null"] },
+          "model_route_id": { "type": ["string", "null"] },
+          "started_at": { "type": "string" },
+          "completed_at": { "type": "string" },
+          "duration_ms": { "type": "integer", "minimum": 0 },
+          "terminal_state": { "type": "string" },
+          "http_status": { "type": ["integer", "null"], "minimum": 100, "maximum": 599 },
+          "error_code": { "type": ["string", "null"] },
+          "attempt_count": { "type": "integer", "minimum": 0 },
+          "usage_present": { "type": "boolean" },
+          "stream": { "type": "boolean" },
+          "retry_count": { "type": "integer", "minimum": 0 },
+          "fallback_count": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

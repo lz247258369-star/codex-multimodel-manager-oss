@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/registry-snapshot/v1",
+  "title": "RouterRegistrySnapshot v1",
+  "description": "Immutable registry snapshot bound to one effective config generation. Entries are provider-scoped; duplicate keys and cross-provider inference fail closed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "config_generation",
+    "clients",
+    "providers",
+    "protocols",
+    "provider_routes",
+    "protocol_routes",
+    "model_routes",
+    "routes",
+    "endpoints",
+    "policies"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "config_generation": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "clients": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["client_id", "adapter_id", "enabled", "auth_scope", "version"],
+        "properties": {
+          "client_id": { "type": "string" },
+          "adapter_id": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "auth_scope": { "type": "string" },
+          "allowed_route_ids": { "type": "array", "items": { "type": "string" } },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "providers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider_id", "availability", "adapter_id", "adapter_version", "has_eligible_adapter", "version"],
+        "properties": {
+          "provider_id": { "type": "string" },
+          "availability": { "enum": ["DirectOnly", "Planned", "Placeholder", "Eligible"] },
+          "adapter_id": { "type": "string" },
+          "adapter_version": { "type": "string" },
+          "has_eligible_adapter": { "type": "boolean" },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "protocols": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocol_id", "is_eligible_protocol", "is_placeholder", "version"],
+        "properties": {
+          "protocol_id": { "type": "string" },
+          "is_eligible_protocol": { "type": "boolean" },
+          "is_placeholder": { "type": "boolean" },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "provider_routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider_route_id", "provider_id", "adapter_id", "adapter_version", "enabled", "version"],
+        "properties": {
+          "provider_route_id": { "type": "string" },
+          "provider_id": { "type": "string" },
+          "adapter_id": { "type": "string" },
+          "adapter_version": { "type": "string" },
+          "endpoint_ids": { "type": "array", "items": { "type": "string" } },
+          "enabled": { "type": "boolean" },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "protocol_routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocol_route_id", "ingress_protocol", "upstream_protocol", "adapter_id", "adapter_version", "loss_policy", "version", "is_eligible_protocol", "has_eligible_adapter"],
+        "properties": {
+          "protocol_route_id": { "type": "string" },
+          "ingress_protocol": { "type": "string" },
+          "upstream_protocol": { "type": "string" },
+          "adapter_id": { "type": "string" },
+          "adapter_version": { "type": "string" },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "loss_policy": { "const": "fail_closed" },
+          "version": { "type": "integer", "minimum": 1 },
+          "is_eligible_protocol": { "type": "boolean" },
+          "has_eligible_adapter": { "type": "boolean" }
+        }
+      }
+    },
+    "model_routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["model_route_id", "provider_id", "client_model_id", "model_id", "upstream_model_id", "identity_verification", "enabled", "version"],
+        "properties": {
+          "model_route_id": { "type": "string" },
+          "provider_id": { "type": "string" },
+          "client_model_id": { "type": "string" },
+          "model_id": { "type": "string" },
+          "upstream_model_id": { "type": "string" },
+          "aliases": { "type": "array", "items": { "type": "string" } },
+          "capabilities": { "type": "array", "items": { "type": "string" } },
+          "pricing_ref": { "type": ["string", "null"] },
+          "identity_verification": { "const": "explicit_config" },
+          "enabled": { "type": "boolean" },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["route_id", "provider_route_id", "protocol_route_id", "model_route_id", "enabled", "priority", "weight", "health_state", "timeout_policy_id", "retry_policy_id", "failover_policy_id", "version"],
+        "properties": {
+          "route_id": { "type": "string" },
+          "client_ids": { "type": "array", "items": { "type": "string" } },
+          "provider_route_id": { "type": "string" },
+          "protocol_route_id": { "type": "string" },
+          "model_route_id": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "priority": { "type": "integer", "minimum": 0 },
+          "weight": { "type": "integer", "minimum": 0 },
+          "health_state": { "enum": ["UNKNOWN", "HEALTHY", "DEGRADED", "UNHEALTHY", "DISABLED"] },
+          "timeout_policy_id": { "type": "string" },
+          "retry_policy_id": { "type": "string" },
+          "failover_policy_id": { "type": "string" },
+          "fallback_route_ids": { "type": "array", "items": { "type": "string" } },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["endpoint_id", "base_url_ref", "enabled", "data_boundary", "tls_required", "priority", "weight", "version"],
+        "properties": {
+          "endpoint_id": { "type": "string" },
+          "base_url_ref": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "data_boundary": { "type": "string" },
+          "tls_required": { "type": "boolean" },
+          "priority": { "type": "integer", "minimum": 0 },
+          "weight": { "type": "integer", "minimum": 0 },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "policies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["policy_id", "version"],
+        "properties": {
+          "policy_id": { "type": "string" },
+          "version": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  }
+}

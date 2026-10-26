@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "local_router": {
+    "port": 50000,
+    "limits": {
+      "max_connections": 16,
+      "shutdown_grace_ms": 20000
+    }
+  }
+}

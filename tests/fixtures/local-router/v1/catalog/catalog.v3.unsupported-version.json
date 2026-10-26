@@ -1,0 +1,14 @@
+{
+  "version": 4,
+  "providers": [
+    {
+      "id": "openrouter",
+      "models": [
+        {
+          "id": "z-ai/glm-5.3",
+          "status": "credit"
+        }
+      ]
+    }
+  ]
+}

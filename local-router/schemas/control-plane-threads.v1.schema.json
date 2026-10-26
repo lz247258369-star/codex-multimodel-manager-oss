@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-threads/v1",
+  "title": "HS-1B bounded observed-thread list",
+  "description": "Bounded observed-thread projection. Only the external thread reference is exposed; canonical thread ids, raw Codex metadata, prompts, responses, headers, and secrets are absent by construction.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "snapshot_at", "effective_enabled", "observed_thread_count", "thread_count", "threads"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "snapshot_at": { "type": "string" },
+    "effective_enabled": { "type": "boolean" },
+    "observed_thread_count": { "type": "integer", "minimum": 0 },
+    "thread_count": { "type": "integer", "minimum": 0 },
+    "threads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["thread_ref", "client_id", "first_seen", "last_seen", "request_kind", "window_number", "requested_model", "selected_model", "selection_state", "selection_model", "selection_generation", "selection_expires_at", "last_failure_code", "last_failure_at"],
+        "properties": {
+          "thread_ref": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+          "client_id": { "type": "string" },
+          "first_seen": { "type": "string" },
+          "last_seen": { "type": "string" },
+          "request_kind": { "type": ["string", "null"] },
+          "window_number": { "type": ["integer", "null"], "minimum": 0 },
+          "requested_model": { "type": ["string", "null"] },
+          "selected_model": { "type": ["string", "null"] },
+          "selection_state": { "enum": ["none", "pending", "active", "superseded", "cleared", "expired", "unknown"] },
+          "selection_model": { "type": ["string", "null"] },
+          "selection_generation": { "type": "integer", "minimum": 0 },
+          "selection_expires_at": { "type": ["string", "null"] },
+          "last_failure_code": { "type": ["string", "null"] },
+          "last_failure_at": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

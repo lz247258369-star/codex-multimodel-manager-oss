@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.Core</RootNamespace>
+    <AssemblyName>Router.Core</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

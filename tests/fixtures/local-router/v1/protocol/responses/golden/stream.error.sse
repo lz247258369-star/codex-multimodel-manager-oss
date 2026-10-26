@@ -1,0 +1,6 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_protocol_error","status":"in_progress","model":"synthetic-model-v1"}}
+
+event: error
+data: {"type":"error","code":"provider_5xx","message":"safe provider error","param":null,"request_id":null,"retryable":false}
+

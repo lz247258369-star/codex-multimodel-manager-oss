@@ -1,0 +1,8 @@
+{
+  "kind": "Retry",
+  "reason_code": "retry_allowed",
+  "route_id": null,
+  "attempt_number": 2,
+  "delay_ms": 400,
+  "note": "Synthetic decision fixture; no content or secrets."
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/resolved-route/v1",
+  "title": "ResolvedRoute v1",
+  "description": "Immutable output of route resolution. Bound to one config generation; never drifts during the request lifetime. Policy fields are references only until LR-11.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "config_generation",
+    "route_id",
+    "client_id",
+    "provider_route_id",
+    "protocol_route_id",
+    "model_route_id",
+    "endpoint_id",
+    "effective_capabilities",
+    "timeout_policy_id",
+    "retry_policy_id",
+    "failover_policy_id"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "config_generation": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "route_id": { "type": "string" },
+    "client_id": { "type": "string" },
+    "provider_route_id": { "type": "string" },
+    "protocol_route_id": { "type": "string" },
+    "model_route_id": { "type": "string" },
+    "endpoint_id": { "type": "string" },
+    "effective_capabilities": { "type": "array", "items": { "type": "string" } },
+    "timeout_policy_id": { "type": "string" },
+    "retry_policy_id": { "type": "string" },
+    "failover_policy_id": { "type": "string" },
+    "pricing_snapshot_id": { "type": ["string", "null"] },
+    "secret_ref_name": { "type": ["string", "null"] }
+  }
+}

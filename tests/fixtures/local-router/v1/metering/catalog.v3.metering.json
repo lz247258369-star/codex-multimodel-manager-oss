@@ -1,0 +1,32 @@
+{
+  "version": 3,
+  "price_basis": "USD per 1M tokens",
+  "price_note": "Synthetic deterministic pricing fixture; no live account or billing data.",
+  "providers": [
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "env_key": "OPENROUTER_API_KEY",
+      "models": [
+        {"id":"z-ai/glm-5.3","label":"GLM 5.3","brand":"Z.ai / GLM","vendor":"Z.ai","family":"GLM","variant":"5.3","performance_levels":["high"],"price_input":5.0,"price_output":30.0,"price_currency":"USD","price_source":"synthetic-pricing","price_updated_at":"2026-08-01","status":"credit"},
+        {"id":"shared-model","label":"Shared Model A","brand":"Synthetic","vendor":"Synthetic","family":"Synthetic","variant":"A","performance_levels":["high"],"price_input":1.0,"price_output":2.0,"price_currency":"USD","price_source":"synthetic-pricing","price_updated_at":"2026-08-01","status":"credit"}
+      ]
+    },
+    {
+      "id": "modelstudio",
+      "label": "Model Studio",
+      "env_key": "CODEX_DASHSCOPE_API_KEY",
+      "models": [
+        {"id":"qwen3.8-max","label":"Qwen 3.8 Max","brand":"Qwen","vendor":"Alibaba / Qwen","family":"Qwen 3.8","variant":"Max","performance_levels":["high"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"provider-dynamic","price_updated_at":null,"status":"configured"}
+      ]
+    },
+    {
+      "id": "mimo",
+      "label": "Xiaomi MiMo",
+      "env_key": "MIMO_API_KEY",
+      "models": [
+        {"id":"shared-model","label":"Shared Model B","brand":"Synthetic","vendor":"Synthetic","family":"Synthetic","variant":"B","performance_levels":["high"],"price_input":5.0,"price_output":10.0,"price_currency":"USD","price_source":"synthetic-pricing","price_updated_at":"2026-08-01","status":"credit"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-thread-selection-feature/v1",
+  "title": "HS-1B thread-selection capability read",
+  "description": "Configured vs effective thread-scoped model selection capability plus bounded aggregate counts. Contains no thread identity, content, path, or secret.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "config_generation", "configured_enabled", "effective_enabled", "mutation_available", "observed_thread_count", "active_selection_count", "pending_selection_count", "capture_open", "snapshot_at"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "config_generation": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "configured_enabled": { "type": "boolean" },
+    "effective_enabled": { "type": "boolean" },
+    "mutation_available": { "type": "boolean" },
+    "observed_thread_count": { "type": "integer", "minimum": 0 },
+    "active_selection_count": { "type": "integer", "minimum": 0 },
+    "pending_selection_count": { "type": "integer", "minimum": 0 },
+    "capture_open": { "type": "boolean" },
+    "snapshot_at": { "type": "string" }
+  }
+}

@@ -1,0 +1,9 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_protocol_reasoning","status":"in_progress","model":"synthetic-model-v1"}}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","item_id":"reasoning_protocol_1","summary_index":0,"delta":"Synthetic reasoning."}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_protocol_reasoning","status":"completed","model":"synthetic-model-v1"}}
+

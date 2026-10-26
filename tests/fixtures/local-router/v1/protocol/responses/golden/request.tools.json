@@ -1,0 +1,19 @@
+{
+  "model": "synthetic-model-v1",
+  "input": "What is the weather?",
+  "tools": [
+    {
+      "type": "function",
+      "name": "synthetic_weather",
+      "description": "Synthetic weather tool.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "city": { "type": "string" }
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto",
+  "stream": false
+}

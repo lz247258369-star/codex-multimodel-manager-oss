@@ -1,0 +1,16 @@
+{
+  "id": "resp_00000000-0000-7000-8000-000000000301",
+  "object": "response",
+  "created_at": 1780000000,
+  "status": "completed",
+  "model": "synthetic-model-v1",
+  "output": [
+    {
+      "type": "function_call",
+      "id": "fc_00000000-0000-7000-8000-000000000302",
+      "call_id": "call_synthetic_2",
+      "name": "synthetic_weather",
+      "arguments": "{\"city\":\"shanghai\"}"
+    }
+  ]
+}

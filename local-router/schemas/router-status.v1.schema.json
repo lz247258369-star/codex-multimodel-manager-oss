@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/router-status/v1",
+  "title": "Redacted router status",
+  "description": "Authenticated redacted status payload. Never contains secrets, raw secret refs, base URLs, request content, or paths.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "lifecycle", "ready", "config_generation", "in_flight_count", "local_router_enabled", "supported_contracts", "routes"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "lifecycle": { "enum": ["STOPPED", "STARTING", "READY", "DEGRADED", "STOPPING", "FAILED"] },
+    "ready": { "type": "boolean" },
+    "config_generation": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "in_flight_count": { "type": "integer", "minimum": 0 },
+    "local_router_enabled": { "type": "boolean" },
+    "supported_contracts": { "type": "array", "items": { "type": "string" } },
+    "routes": { "type": "array" }
+  }
+}

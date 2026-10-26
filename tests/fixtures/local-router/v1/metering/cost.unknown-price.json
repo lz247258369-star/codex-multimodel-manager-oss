@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "input_cost": null,
+  "output_cost": null,
+  "cached_cost": null,
+  "reasoning_cost": null,
+  "total_cost": null,
+  "currency": "USD",
+  "pricing_snapshot_version": "installer/model-catalog.json:v3@1",
+  "pricing_source": "provider-dynamic",
+  "effective_at": null,
+  "status": "UnknownPrice",
+  "estimated": true
+}

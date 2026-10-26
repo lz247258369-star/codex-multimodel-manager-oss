@@ -1,0 +1,1 @@
+{"schema_version":1,"scope":"bounded_recent_records","billing_note":"informational_estimate_not_billing","record_count":2,"capacity":500,"known_usage_count":0,"unknown_usage_count":2,"known_cost_count":0,"unknown_cost_count":2,"input_tokens_total":null,"output_tokens_total":null,"estimated_cost_by_currency":[],"degraded":true,"degradation_codes":["usage_missing"],"records":[]}

@@ -1,0 +1,10 @@
+{
+  "error": {
+    "type": "router_error",
+    "code": "semantic_loss",
+    "message": "The protocol mapping cannot preserve the required semantics.",
+    "param": "multimodal",
+    "request_id": null,
+    "retryable": false
+  }
+}

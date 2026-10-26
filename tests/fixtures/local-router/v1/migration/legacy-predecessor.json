@@ -1,0 +1,10 @@
+{
+  "schema_version": 0,
+  "version": 1,
+  "mode": "direct",
+  "local_router": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 47821
+  }
+}

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.Observability</RootNamespace>
+    <AssemblyName>Router.Observability</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Router.Core\Router.Core.csproj" />
+  </ItemGroup>
+</Project>

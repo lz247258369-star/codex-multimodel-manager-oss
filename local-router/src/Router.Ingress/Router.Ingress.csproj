@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.Ingress</RootNamespace>
+    <AssemblyName>Router.Ingress</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Router.ClientAdapters.Responses\Router.ClientAdapters.Responses.csproj" />
+    <ProjectReference Include="..\Router.Configuration\Router.Configuration.csproj" />
+    <ProjectReference Include="..\Router.Core\Router.Core.csproj" />
+    <ProjectReference Include="..\Router.Health\Router.Health.csproj" />
+    <ProjectReference Include="..\Router.Metering\Router.Metering.csproj" />
+    <ProjectReference Include="..\Router.Observability\Router.Observability.csproj" />
+    <ProjectReference Include="..\Router.Policies\Router.Policies.csproj" />
+    <ProjectReference Include="..\Router.Registries\Router.Registries.csproj" />
+    <ProjectReference Include="..\Router.Secrets\Router.Secrets.csproj" />
+    <ProjectReference Include="..\Router.ThreadSelection\Router.ThreadSelection.csproj" />
+  </ItemGroup>
+</Project>

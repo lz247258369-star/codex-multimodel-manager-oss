@@ -1,0 +1,21 @@
+{
+  "model": "synthetic-model-v1",
+  "input": "Synthetic tool input.",
+  "tools": [
+    {
+      "type": "function",
+      "name": "synthetic_weather",
+      "description": "Synthetic weather tool.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "city": { "type": "string" }
+        },
+        "required": ["city"]
+      },
+      "strict": true
+    }
+  ],
+  "tool_choice": { "type": "function", "name": "synthetic_weather" },
+  "stream": false
+}

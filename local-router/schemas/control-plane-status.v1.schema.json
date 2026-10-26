@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-status/v1",
+  "title": "LR-14P control-plane status",
+  "description": "Authenticated versioned control-plane status projection. Never contains secrets, paths, endpoint URLs, or request content.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "config_generation", "lifecycle", "ready", "in_flight_count", "local_router_enabled", "supported_control_plane_contracts", "metering_availability", "recent_request_availability", "policy_mutation_available", "feature_mutation_available", "thread_selection", "health_summary", "circuit_breaker", "lifecycle_control"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "config_generation": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "lifecycle": { "enum": ["STOPPED", "STARTING", "READY", "DEGRADED", "STOPPING", "FAILED"] },
+    "ready": { "type": "boolean" },
+    "in_flight_count": { "type": "integer", "minimum": 0 },
+    "local_router_enabled": { "type": "boolean" },
+    "supported_control_plane_contracts": { "type": "array", "items": { "type": "string" } },
+    "metering_availability": { "type": "object", "additionalProperties": false, "required": ["available"], "properties": { "available": { "type": "boolean" }, "reason_code": { "type": ["string", "null"] } } },
+    "recent_request_availability": { "type": "object", "additionalProperties": false, "required": ["available"], "properties": { "available": { "type": "boolean" }, "reason_code": { "type": ["string", "null"] } } },
+    "policy_mutation_available": { "type": "boolean" },
+    "feature_mutation_available": { "type": "boolean" },
+    "thread_selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["configured_enabled", "effective_enabled", "mutation_available"],
+      "properties": {
+        "configured_enabled": { "type": "boolean" },
+        "effective_enabled": { "type": "boolean" },
+        "mutation_available": { "type": "boolean" },
+        "observed_thread_count": { "type": ["integer", "null"], "minimum": 0 },
+        "active_selection_count": { "type": ["integer", "null"], "minimum": 0 },
+        "pending_selection_count": { "type": ["integer", "null"], "minimum": 0 },
+        "capture_open": { "type": ["boolean", "null"] },
+        "snapshot_at": { "type": ["string", "null"] },
+        "reason_code": { "type": ["string", "null"] }
+      }
+    },
+    "health_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "reason_code": { "type": ["string", "null"] },
+        "generated_at": { "type": ["string", "null"] },
+        "route_count": { "type": ["integer", "null"], "minimum": 0 },
+        "healthy_count": { "type": ["integer", "null"], "minimum": 0 },
+        "degraded_count": { "type": ["integer", "null"], "minimum": 0 },
+        "unhealthy_count": { "type": ["integer", "null"], "minimum": 0 },
+        "unknown_count": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "circuit_breaker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effective_state", "mutation_available", "reason_code"],
+      "properties": {
+        "effective_state": { "const": "disabled" },
+        "configured": { "type": ["string", "null"] },
+        "mutation_available": { "const": false },
+        "reason_code": { "const": "CIRCUIT_BREAKER_POLICY_CONFIGURATION_GAP" }
+      }
+    },
+    "lifecycle_control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_stop_available", "reason_code"],
+      "properties": {
+        "start_stop_available": { "const": false },
+        "reason_code": { "const": "LIFECYCLE_CONTROL_GAP" }
+      }
+    }
+  }
+}

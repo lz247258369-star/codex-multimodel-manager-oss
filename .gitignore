@@ -1,0 +1,31 @@
+# Secrets / local state
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+auth.json
+state.json
+candidates.json
+approved-models.json
+discovered-models.json
+discovery-baseline.json
+model-history.jsonl
+NEW_MODELS_FOUND.txt
+
+# Local backups / generated runtime state
+backups/
+handoffs/
+reports/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# .NET build output (Local Router)
+local-router/**/bin/
+local-router/**/obj/
+local-router/**/TestResults/

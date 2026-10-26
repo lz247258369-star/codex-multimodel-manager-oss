@@ -1,0 +1,6 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_00000000-0000-7000-8000-000000000801","object":"response","status":"in_progress","model":"synthetic-model-v1","output":[]}}
+
+event: error
+data: {"type":"error","code":"internal_error","message":"An internal error occurred.","request_id":"req_00000000-0000-7000-8000-000000000802"}
+

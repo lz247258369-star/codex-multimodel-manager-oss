@@ -1,0 +1,60 @@
+{
+  "version": 3,
+  "price_basis": "USD per 1M tokens",
+  "price_note": "Reference API pricing only. Subscription/Codex credit usage may differ. Unknown provider prices stay null and sort last.",
+  "providers": [
+    {
+      "id": "chatgpt",
+      "label": "OpenAI / ChatGPT",
+      "env_key": "",
+      "models": [
+        {"id":"__account_default__","label":"官方默认（按账号实际可用模型）","brand":"OpenAI","vendor":"OpenAI","family":"账户默认","variant":"自动","performance_levels":["low","medium","high","xhigh"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"account-dependent","price_updated_at":"2026-08-25","status":"recommended"},
+        {"id":"gpt-5.6-sol","label":"GPT-5.6 Sol","brand":"OpenAI","vendor":"OpenAI","family":"GPT-5.6","variant":"Sol","performance_levels":["low","medium","high","xhigh"],"price_input":5.0,"price_output":30.0,"price_currency":"USD","price_source":"OpenAI API pricing","price_updated_at":"2026-08-25","status":"official"},
+        {"id":"gpt-5.6-terra","label":"GPT-5.6 Terra","brand":"OpenAI","vendor":"OpenAI","family":"GPT-5.6","variant":"Terra","performance_levels":["low","medium","high","xhigh"],"price_input":2.0,"price_output":12.0,"price_currency":"USD","price_source":"OpenAI pricing update 2026-07-30","price_updated_at":"2026-08-25","status":"official"},
+        {"id":"gpt-5.6-luna","label":"GPT-5.6 Luna","brand":"OpenAI","vendor":"OpenAI","family":"GPT-5.6","variant":"Luna","performance_levels":["low","medium","high","xhigh"],"price_input":0.2,"price_output":1.2,"price_currency":"USD","price_source":"OpenAI pricing update 2026-07-30","price_updated_at":"2026-08-25","status":"official"},
+        {"id":"gpt-5.5","label":"GPT-5.5","brand":"OpenAI","vendor":"OpenAI","family":"GPT-5.5","variant":"Standard","performance_levels":["low","medium","high","xhigh"],"price_input":5.0,"price_output":30.0,"price_currency":"USD","price_source":"OpenAI API pricing","price_updated_at":"2026-08-25","status":"official"},
+        {"id":"gpt-5.4","label":"GPT-5.4","brand":"OpenAI","vendor":"OpenAI","family":"GPT-5.4","variant":"Standard","performance_levels":["low","medium","high"],"price_input":2.5,"price_output":15.0,"price_currency":"USD","price_source":"OpenAI API pricing","price_updated_at":"2026-08-25","status":"official"},
+        {"id":"gpt-5.4-mini","label":"GPT-5.4 Mini","brand":"OpenAI","vendor":"OpenAI","family":"GPT-5.4","variant":"Mini","performance_levels":["low","medium","high"],"price_input":0.75,"price_output":4.5,"price_currency":"USD","price_source":"OpenAI API pricing","price_updated_at":"2026-08-25","status":"official"}
+      ]
+    },
+    {
+      "id": "modelstudio",
+      "label": "阿里云百炼（Qwen / DeepSeek）",
+      "env_key": "CODEX_DASHSCOPE_API_KEY",
+      "models": [
+        {"id":"qwen3-coder-plus","label":"Qwen3 Coder Plus","brand":"Qwen","vendor":"Alibaba / Qwen","family":"Qwen3 Coder","variant":"Plus","performance_levels":["low","medium","high"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"provider-dynamic","price_updated_at":null,"status":"verified"},
+        {"id":"qwen3.8-max","label":"Qwen 3.8 Max","brand":"Qwen","vendor":"Alibaba / Qwen","family":"Qwen 3.8","variant":"Max","performance_levels":["low","medium","high"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"provider-dynamic","price_updated_at":null,"status":"configured"},
+        {"id":"qwen3-coder-next","label":"Qwen3 Coder Next","brand":"Qwen","vendor":"Alibaba / Qwen","family":"Qwen3 Coder","variant":"Next","performance_levels":["low","medium","high"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"provider-dynamic","price_updated_at":null,"status":"configured"},
+        {"id":"deepseek-v4-pro","label":"DeepSeek V4 Pro","brand":"DeepSeek","vendor":"DeepSeek","family":"DeepSeek V4","variant":"Pro","performance_levels":["low","medium","high"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"provider-dynamic","price_updated_at":null,"status":"verified"},
+        {"id":"deepseek-v4-flash","label":"DeepSeek V4 Flash","brand":"DeepSeek","vendor":"DeepSeek","family":"DeepSeek V4","variant":"Flash","performance_levels":["low","medium","high"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"provider-dynamic","price_updated_at":null,"status":"configured"}
+      ]
+    },
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "env_key": "OPENROUTER_API_KEY",
+      "models": [
+        {"id":"stealth/ox-alpha","label":"Ox Alpha（实验）","brand":"Stealth","vendor":"Stealth / Unknown","family":"Ox Alpha","variant":"Experimental","performance_levels":["low","medium","high","xhigh"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"OpenRouter-live","price_updated_at":null,"status":"experimental"},
+        {"id":"z-ai/glm-5.3","label":"GLM 5.3","brand":"Z.ai / GLM","vendor":"Z.ai","family":"GLM","variant":"5.3","performance_levels":["low","medium","high"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"OpenRouter-live","price_updated_at":null,"status":"credit"}
+      ]
+    },
+    {
+      "id": "mimo",
+      "label": "Xiaomi MiMo",
+      "env_key": "MIMO_API_KEY",
+      "models": [
+        {"id":"mimo-v2.5-pro","label":"MiMo V2.5 Pro","brand":"MiMo","vendor":"Xiaomi","family":"MiMo V2.5","variant":"Pro","performance_levels":["low","medium","high"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"provider-dynamic","price_updated_at":null,"status":"credit"},
+        {"id":"mimo-v2.5","label":"MiMo V2.5","brand":"MiMo","vendor":"Xiaomi","family":"MiMo V2.5","variant":"Standard","performance_levels":["low","medium","high"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"provider-dynamic","price_updated_at":null,"status":"configured"}
+      ]
+    },
+    {
+      "id": "deepseek",
+      "label": "DeepSeek Official",
+      "env_key": "DEEPSEEK_API_KEY",
+      "models": [
+        {"id":"deepseek-flash","label":"DeepSeek V4.1 Flash","brand":"DeepSeek","vendor":"DeepSeek","family":"DeepSeek V4.1","variant":"Flash","performance_levels":["low","high","max"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"provider-dynamic","price_updated_at":null,"status":"official"},
+        {"id":"deepseek-v4-pro","label":"DeepSeek V4 Pro","brand":"DeepSeek","vendor":"DeepSeek","family":"DeepSeek V4","variant":"Pro","performance_levels":["low","high","max"],"price_input":null,"price_output":null,"price_currency":"USD","price_source":"provider-dynamic","price_updated_at":null,"status":"official"}
+      ]
+    }
+  ]
+}

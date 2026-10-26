@@ -1,0 +1,9 @@
+{
+  "model": "synthetic-model-v1",
+  "input": "Synthetic reasoning input.",
+  "reasoning": {
+    "effort": "medium",
+    "summary": "auto"
+  },
+  "stream": false
+}

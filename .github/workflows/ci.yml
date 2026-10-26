@@ -1,0 +1,354 @@
+name: Development Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  development-gate:
+    name: development-gate
+    runs-on: windows-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # The LR-14 scope validator reviews the committed branch delta
+          # (merge-base of origin/main and HEAD), so the base ref must be
+          # present in the checkout - also for the detached-HEAD pull_request
+          # checkout shape.
+          fetch-depth: 0
+
+      - name: Show PowerShell version
+        shell: pwsh
+        run: $PSVersionTable | Format-List
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.400
+          cache: true
+          cache-dependency-path: local-router/**/packages.lock.json
+
+      - name: Restore Local Router
+        shell: pwsh
+        run: dotnet restore local-router/LocalRouter.sln
+
+      - name: Build Local Router
+        shell: pwsh
+        run: dotnet build local-router/LocalRouter.sln --configuration Release --no-restore
+
+      - name: PR10A focused Host and native startup regression
+        id: startup-regression
+        shell: pwsh
+        run: |
+          # Reuse Release outputs. These three cases reuse the original READY,
+          # STARTING cancellation and clean shutdown assertions; none is skipped
+          # by the full suite below. Run native attacks even if smoke tests fail
+          # so the same CI provides both refusal and filesystem evidence.
+          dotnet test local-router/tests/Router.Core.Tests/Router.Core.Tests.csproj --configuration Release --no-build --filter 'FullyQualifiedName~HostStartupGateSmokeTests' --logger 'console;verbosity=normal'
+          $smokeExit = $LASTEXITCODE
+          $nativeLog = Join-Path $env:RUNNER_TEMP 'pr10a-fix2-native.log'
+          ./tests/validate-router-host-startup-gate.ps1 -RepositoryRoot $PWD -UseExistingBuild *> $nativeLog
+          $nativeExit = $LASTEXITCODE
+          $nativeText = Get-Content -LiteralPath $nativeLog -Raw
+          Write-Host $nativeText
+          $nativePassed = $nativeText -match '(?m)^STARTUP_GATE_NATIVE PASS(?:\s|$)'
+          if ($smokeExit -ne 0 -or $nativeExit -ne 0 -or -not $nativePassed) { throw "PR10A focused regression failed: smoke=$smokeExit native=$nativeExit nativeMarker=$nativePassed" }
+
+      - name: Test Local Router
+        id: router-tests
+        # A focused failure must still produce full-suite evidence and remain
+        # a failed job; do not use continue-on-error or suppress the failure.
+        if: ${{ !cancelled() && steps.startup-regression.outcome != 'skipped' }}
+        shell: pwsh
+        run: dotnet test local-router/LocalRouter.sln --configuration Release --no-build
+
+      - name: Run repository validation
+        if: ${{ !cancelled() && steps.router-tests.outcome == 'success' }}
+        shell: pwsh
+        run: ./tests/validate-repo.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router architecture validation
+        shell: pwsh
+        run: ./tests/validate-local-router-architecture.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router ingress validation
+        shell: pwsh
+        run: ./tests/validate-local-router-ingress.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router registries validation
+        shell: pwsh
+        run: ./tests/validate-local-router-registries.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router provider harness validation
+        shell: pwsh
+        run: ./tests/validate-local-router-provider.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router OpenRouter adapter validation
+        shell: pwsh
+        run: ./tests/validate-local-router-openrouter.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router Model Studio adapter validation
+        shell: pwsh
+        run: ./tests/validate-local-router-modelstudio.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router OpenAI API adapter validation
+        shell: pwsh
+        run: ./tests/validate-local-router-openai.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router Xiaomi MiMo adapter validation
+        shell: pwsh
+        run: ./tests/validate-local-router-mimo.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router DeepSeek direct adapter validation
+        shell: pwsh
+        run: ./tests/validate-local-router-deepseek.ps1 -RepositoryRoot $PWD
+
+      - name: Run DeepSeek direct router bootstrap validation
+        shell: pwsh
+        run: ./tests/validate-deepseek-router-bootstrap.ps1 -RepositoryRoot $PWD
+
+      - name: Run DeepSeek secret bridge validation
+        shell: pwsh
+        run: ./tests/validate-deepseek-secret-bridge.ps1 -RepositoryRoot $PWD
+
+      - name: Run registry-only model approval validation
+        shell: pwsh
+        run: ./tests/validate-model-approval-registry-only.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router production startup validation
+        shell: pwsh
+        run: ./tests/validate-local-router-production-startup.ps1 -RepositoryRoot $PWD
+
+      - name: Run Router control-plane bootstrap validation
+        shell: pwsh
+        run: ./tests/validate-router-control-plane-bootstrap.ps1 -RepositoryRoot $PWD
+
+      - name: Run DSR7-C capability diagnostic validation
+        shell: pwsh
+        run: ./tests/validate-dsr7c-capability-diagnostic.ps1 -RepositoryRoot $PWD
+
+      - name: Run DSR7-C safe failure diagnostic validation
+        shell: pwsh
+        run: ./tests/validate-dsr7c-safe-failure-diagnostic.ps1 -RepositoryRoot $PWD
+
+      - name: Run DSR7-C safe tool type classifier validation
+        shell: pwsh
+        run: ./tests/validate-dsr7c-safe-tool-type-classifier.ps1 -RepositoryRoot $PWD
+
+      - name: Run DSR7-C safe custom tool identity validation
+        shell: pwsh
+        run: ./tests/validate-dsr7c-safe-custom-tool-identity.ps1 -RepositoryRoot $PWD
+
+      - name: Run DSR7-C apply_patch compatibility bridge validation
+        shell: pwsh
+        run: ./tests/validate-dsr7c-apply-patch-compat-bridge.ps1 -RepositoryRoot $PWD
+
+      - name: Run Responses upstream function wire validation
+        shell: pwsh
+        run: ./tests/validate-responses-upstream-function-wire.ps1 -RepositoryRoot $PWD
+
+      - name: Run Responses upstream tool_choice wire validation
+        shell: pwsh
+        run: ./tests/validate-responses-upstream-tool-choice-wire.ps1 -RepositoryRoot $PWD
+
+      - name: Run DSR7-C apply_patch request bridge validation
+        shell: pwsh
+        run: ./tests/validate-dsr7c-apply-patch-request-bridge.ps1 -RepositoryRoot $PWD
+
+      - name: Run DSR7-C apply_patch response bridge validation
+        shell: pwsh
+        run: ./tests/validate-dsr7c-apply-patch-response-bridge.ps1 -RepositoryRoot $PWD
+
+      - name: Run DSR7-C apply_patch stream bridge validation
+        shell: pwsh
+        run: ./tests/validate-dsr7c-apply-patch-stream-bridge.ps1 -RepositoryRoot $PWD
+
+      - name: Run DSR7-C apply_patch final integration validation
+        shell: pwsh
+        run: ./tests/validate-dsr7c-apply-patch-final-integration.ps1 -RepositoryRoot $PWD
+
+      - name: Run DSR7-C apply_patch protected-file authorization validation
+        shell: pwsh
+        run: ./tests/validate-dsr7c-apply-patch-file-authorization.ps1 -RepositoryRoot $PWD
+
+      - name: Run FIX5 patch identity portability regression
+        shell: pwsh
+        run: ./tests/validate-dsr7c-apply-patch-file-authorization-regression.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router protocol adapter boundary validation
+        shell: pwsh
+        run: ./tests/validate-local-router-protocol.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router health and observability validation
+        shell: pwsh
+        run: ./tests/validate-local-router-observability.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router usage and cost metering validation
+        shell: pwsh
+        run: ./tests/validate-local-router-metering.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router production metering remediation validation
+        shell: pwsh
+        run: ./tests/validate-local-router-metering-remediation.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router policy and failover validation
+        shell: pwsh
+        run: ./tests/validate-local-router-policy.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router Codex CLI adapter validation
+        shell: pwsh
+        run: ./tests/validate-local-router-codex-cli.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router Codex loopback compatibility runner
+        shell: pwsh
+        run: ./tests/fixtures/local-router/codex-cli/run-codex-compat.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router Codex Desktop adapter validation
+        shell: pwsh
+        run: ./tests/validate-local-router-codex-desktop.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router LR-13 scope validation
+        shell: pwsh
+        run: ./tests/validate-local-router-lr13-scope.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router production execution composition validation
+        shell: pwsh
+        run: ./tests/validate-local-router-execution-composition.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router LR-14P control-plane validation
+        shell: pwsh
+        run: ./tests/validate-local-router-lr14p-control-plane.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router V4 UI validation
+        shell: pwsh
+        run: ./tests/validate-local-router-v4-ui.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router bootstrap validation
+        shell: pwsh
+        run: ./tests/validate-local-router-bootstrap.ps1 -RepositoryRoot $PWD
+
+      # Runs after restore/build/test on purpose: those steps rewrite tracked
+      # local-router packages.lock.json files in the worktree, and the scope
+      # decision must stay a committed-delta decision that ignores that noise.
+      - name: Run Local Router LR-14 scope validation
+        shell: pwsh
+        run: ./tests/validate-local-router-lr14-scope.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router LR-14 scope regression validation
+        shell: pwsh
+        run: ./tests/validate-local-router-lr14-scope-regression.ps1 -RepositoryRoot $PWD
+
+      - name: Run Local Router HS1B-RB1 scope validation
+        shell: pwsh
+        run: ./tests/validate-local-router-hs1b-rb1-scope.ps1 -RepositoryRoot $PWD
+
+      - name: Run PowerShell runtime validation
+        shell: pwsh
+        run: ./tests/validate-powershell-runtime.ps1 -RepositoryRoot $PWD
+
+      - name: Run runtime regression validation
+        shell: pwsh
+        run: ./tests/validate-runtime-regressions.ps1 -RepositoryRoot $PWD
+
+      - name: Run Codex Profile V2 migration validation
+        shell: pwsh
+        run: ./tests/validate-profile-v2.ps1 -RepositoryRoot $PWD
+
+      - name: Run health-check validation
+        shell: pwsh
+        run: ./tests/validate-health-check.ps1 -RepositoryRoot $PWD
+
+      - name: Run Ox Alpha integration validation
+        shell: pwsh
+        run: ./tests/validate-ox-alpha.ps1 -RepositoryRoot $PWD
+
+      - name: Run Stealth Model Registry validation
+        shell: pwsh
+        run: ./tests/validate-stealth-registry.ps1 -RepositoryRoot $PWD
+
+      - name: Run Desktop Controller validation
+        shell: pwsh
+        run: ./tests/validate-desktop-controller.ps1 -RepositoryRoot $PWD
+
+      - name: Run Desktop shortcut validation
+        shell: pwsh
+        run: ./tests/validate-desktop-shortcuts.ps1 -RepositoryRoot $PWD
+
+      - name: Run V4 Visual Console validation
+        shell: pwsh
+        run: ./tests/validate-visual-console.ps1 -RepositoryRoot $PWD
+
+      - name: Run V4 Visual Console entrypoint validation
+        shell: pwsh
+        run: ./tests/validate-visual-console-entrypoint.ps1 -RepositoryRoot $PWD
+
+      - name: Run V4 model hierarchy and price-sort validation
+        shell: pwsh
+        run: ./tests/validate-model-hierarchy.ps1 -RepositoryRoot $PWD
+
+      - name: Run V4 vendor-only card grouping validation
+        shell: pwsh
+        run: ./tests/validate-model-card-grouping.ps1 -RepositoryRoot $PWD
+
+      - name: Run V4 always-on crash diagnostics validation
+        shell: pwsh
+        run: ./tests/validate-v4-crash-diagnostics.ps1 -RepositoryRoot $PWD
+
+      - name: Run V4 commercial UI polish validation
+        shell: pwsh
+        run: ./tests/validate-commercial-ui-polish.ps1 -RepositoryRoot $PWD
+
+      - name: Run V4 Motion Design System validation
+        shell: pwsh
+        run: ./tests/validate-motion-design-system.ps1 -RepositoryRoot $PWD
+
+      - name: Run V4 single Desktop-control injection validation
+        shell: pwsh
+        run: ./tests/validate-v4-single-desktop-controls.ps1 -RepositoryRoot $PWD
+
+      - name: Run V4 Visual Console shortcut validation
+        shell: pwsh
+        run: ./tests/validate-visual-console-shortcuts.ps1 -RepositoryRoot $PWD
+
+      - name: Run Windows hosted-window taskbar metadata validation
+        shell: pwsh
+        run: ./tests/validate-windows-taskbar-metadata.ps1 -RepositoryRoot $PWD
+
+      - name: Run native Codex Manager launcher validation
+        shell: pwsh
+        run: ./tests/validate-native-launcher.ps1 -RepositoryRoot $PWD
+
+      - name: Run Desktop route selection isolation validation
+        shell: pwsh
+        run: ./tests/validate-desktop-route-selection-sync.ps1 -RepositoryRoot $PWD
+
+      - name: Run Manager launch selection isolation validation
+        shell: pwsh
+        run: ./tests/validate-manager-launch-selection-isolation.ps1 -RepositoryRoot $PWD
+
+      - name: Run dynamic Desktop route button validation
+        shell: pwsh
+        run: ./tests/validate-desktop-dynamic-route-ui.ps1 -RepositoryRoot $PWD
+
+      - name: Run generic Desktop route backend validation
+        shell: pwsh
+        run: ./tests/validate-desktop-chat-generic-route.ps1 -RepositoryRoot $PWD
+
+      - name: Run experimental Codex Desktop provider-route validation
+        shell: pwsh
+        run: ./tests/validate-desktop-chat-provider.ps1 -RepositoryRoot $PWD

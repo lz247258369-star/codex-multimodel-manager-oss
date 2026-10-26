@@ -1,0 +1,18 @@
+{
+  "name": "redaction-injection-fixture",
+  "schema_version": 1,
+  "injected_markers": [
+    "prompt-content-synthetic",
+    "instructions-synthetic",
+    "tool-arguments-synthetic",
+    "tool-result-synthetic",
+    "image-reference-synthetic",
+    "Authorization: Bearer synthetic-not-real",
+    "api-key-synthetic-not-real",
+    "cookie-synthetic",
+    "raw-response-synthetic",
+    "endpoint-secret-synthetic",
+    "C:\\Users\\synthetic-user\\project"
+  ],
+  "note": "Synthetic markers only. No real secret, prompt, or user data."
+}

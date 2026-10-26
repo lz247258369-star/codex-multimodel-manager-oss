@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.ProviderAdapters.Tests</RootNamespace>
+    <AssemblyName>Router.ProviderAdapters.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- CA1707 conflicts with the standard xUnit snake_case naming convention. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Router.ClientAdapters.Responses\Router.ClientAdapters.Responses.csproj" />
+    <ProjectReference Include="..\..\src\Router.Core\Router.Core.csproj" />
+    <ProjectReference Include="..\..\src\Router.ProviderAdapters.Abstractions\Router.ProviderAdapters.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Router.ProviderAdapters.Responses\Router.ProviderAdapters.Responses.csproj" />
+    <ProjectReference Include="..\..\src\Router.Secrets\Router.Secrets.csproj" />
+    <ProjectReference Include="..\..\src\Router.UpstreamHttp\Router.UpstreamHttp.csproj" />
+    <ProjectReference Include="..\ProviderContractKit\ProviderContractKit.csproj" />
+    <ProjectReference Include="..\Router.FakeProvider\Router.FakeProvider.csproj" />
+  </ItemGroup>
+</Project>

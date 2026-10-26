@@ -1,0 +1,12 @@
+{
+  "model": "synthetic-model-v1",
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        { "type": "input_image", "image_url": "https://example.invalid/synthetic.png" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/responses-request/v1",
+  "title": "Responses V1 canonical request subset",
+  "description": "Supported LR-3 subset of OpenAI Responses V1 request semantics. Unsupported capabilities and unknown fields fail closed; this schema documents the canonical request shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["model", "input"],
+  "properties": {
+    "model": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "input": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type"],
+            "properties": {
+              "type": { "enum": ["message", "function_call", "function_call_output", "reasoning"] },
+              "id": { "type": "string", "maxLength": 256 },
+              "role": { "enum": ["user", "system", "developer", "assistant"] },
+              "content": {
+                "oneOf": [
+                  { "type": "string" },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["type", "text"],
+                      "properties": {
+                        "type": { "enum": ["input_text", "output_text"] },
+                        "text": { "type": "string" }
+                      }
+                    }
+                  }
+                ]
+              },
+              "call_id": { "type": "string", "maxLength": 256 },
+              "name": { "type": "string", "maxLength": 128 },
+              "arguments": { "type": "string" },
+              "output": { "type": "string" },
+              "summary": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["type", "text"],
+                  "properties": {
+                    "type": { "const": "summary_text" },
+                    "text": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "stream": { "type": "boolean" },
+    "instructions": { "type": "string" },
+    "reasoning": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "effort": { "enum": ["low", "medium", "high"] },
+        "summary": { "enum": ["auto", "enabled", "disabled"] }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "name"],
+        "properties": {
+          "type": { "const": "function" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "description": { "type": "string" },
+          "parameters": { "type": "object" },
+          "strict": { "type": "boolean" }
+        }
+      }
+    },
+    "tool_choice": {
+      "oneOf": [
+        { "enum": ["auto", "none", "required"] },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "name"],
+          "properties": {
+            "type": { "const": "function" },
+            "name": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "maxProperties": 32
+    },
+    "background": { "const": false },
+    "store": { "const": false },
+    "modalities": { "const": ["text"] },
+    "previous_response_id": { "type": "null" }
+  }
+}

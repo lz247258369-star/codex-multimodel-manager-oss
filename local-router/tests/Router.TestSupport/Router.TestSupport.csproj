@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.TestSupport</RootNamespace>
+    <AssemblyName>Router.TestSupport</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Router.CatalogProjection\Router.CatalogProjection.csproj" />
+    <ProjectReference Include="..\..\src\Router.Configuration\Router.Configuration.csproj" />
+    <ProjectReference Include="..\..\src\Router.Core\Router.Core.csproj" />
+    <ProjectReference Include="..\..\src\Router.Registries\Router.Registries.csproj" />
+    <ProjectReference Include="..\..\src\Router.Routing\Router.Routing.csproj" />
+    <ProjectReference Include="..\..\src\Router.Secrets\Router.Secrets.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex.multimodel.local-router/control-plane-thread-selection-feature-mutation/v1",
+  "title": "HS-1B thread-selection capability mutation",
+  "description": "Compare-and-set against the global Router config generation. Exactly one boolean capability flag may be changed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "expected_generation", "enabled"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "expected_generation": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "enabled": { "type": "boolean" }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "version": 1,
+  "mode": "direct",
+  "local_router": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 47821,
+    "client_auth": {
+      "mode": "bearer_env_ref",
+      "token_ref": "CODEX_LOCAL_ROUTER_TOKEN"
+    },
+    "limits": {
+      "max_request_bytes": 16777216,
+      "max_header_bytes": 32768,
+      "max_connections": 32,
+      "shutdown_grace_ms": 15000
+    }
+  },
+  "clients": [
+    {
+      "client_id": "client.codex_cli",
+      "adapter_id": "adapter.client.codex_cli.responses.v1",
+      "enabled": true,
+      "auth_scope": "responses:invoke",
+      "capabilities": ["teleport"],
+      "version": 1
+    }
+  ],
+  "protocol_routes": [],
+  "provider_routes": [],
+  "model_routes": [],
+  "routes": [],
+  "policies": [],
+  "updated_at": "2026-08-27T00:00:00Z"
+}

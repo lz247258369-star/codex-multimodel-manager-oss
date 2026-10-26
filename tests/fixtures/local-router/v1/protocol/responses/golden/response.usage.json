@@ -1,0 +1,9 @@
+{
+  "id": "resp_protocol_usage",
+  "object": "response",
+  "created_at": 1780000000,
+  "status": "completed",
+  "model": "synthetic-model-v1",
+  "output": [],
+  "usage": { "input_tokens": 100, "output_tokens": 50, "total_tokens": 150 }
+}

@@ -1,0 +1,10 @@
+{
+  "candidates": [
+    { "route_id": "route.openrouter-primary", "weight": 70 },
+    { "route_id": "route.openrouter-secondary", "weight": 30 }
+  ],
+  "selection": {
+    "seed:0001": "route.openrouter-primary",
+    "seed:0002": "route.openrouter-primary"
+  }
+}

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.Policies.Tests</RootNamespace>
+    <AssemblyName>Router.Policies.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- CA1707 conflicts with the standard xUnit snake_case naming convention. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Router.CircuitBreaker\Router.CircuitBreaker.csproj" />
+    <ProjectReference Include="..\..\src\Router.Core\Router.Core.csproj" />
+    <ProjectReference Include="..\..\src\Router.Policies\Router.Policies.csproj" />
+    <ProjectReference Include="..\..\src\Router.ProviderAdapters.Abstractions\Router.ProviderAdapters.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\..\tests\fixtures\local-router\v1\policy\**">
+      <Link>fixtures\local-router\v1\policy\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+</Project>

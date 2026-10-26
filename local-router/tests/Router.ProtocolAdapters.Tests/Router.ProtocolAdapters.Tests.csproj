@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Router.ProtocolAdapters.Tests</RootNamespace>
+    <AssemblyName>Router.ProtocolAdapters.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- CA1707 conflicts with the standard xUnit snake_case naming convention. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Router.ClientAdapters.Responses\Router.ClientAdapters.Responses.csproj" />
+    <ProjectReference Include="..\..\src\Router.Core\Router.Core.csproj" />
+    <ProjectReference Include="..\..\src\Router.ProtocolAdapters.Abstractions\Router.ProtocolAdapters.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Router.ProtocolAdapters.Responses\Router.ProtocolAdapters.Responses.csproj" />
+    <ProjectReference Include="..\..\src\Router.Registries\Router.Registries.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\..\tests\fixtures\local-router\v1\protocol\**">
+      <Link>fixtures\local-router\v1\protocol\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+</Project>
