@@ -881,6 +881,37 @@ $script:RegisteredSlices = @(
             "docs/HS1C_QUOTA_EXHAUSTION_STICKY_FAILOVER.md" = "HS1C-INSTALLER-CONFIG-COMPAT"
         }
     }
+    # OSS-M1-FOUNDATION: open-source foundation on top of the sanitized import root.
+    # Licence, community docs, .gitignore, pinned CI actions and the fail-closed
+    # LR-14 genesis mode. No product, Provider, routing, installer or UI code.
+    [pscustomobject]@{
+        Name      = "OSS-M1-FOUNDATION"
+        Base      = "22339958afb8fc4e3b4c3c4f5d496363bc2956d8"
+        Tip       = "cdf252095bfb990d2c2529452067839dc67cee5a"
+        Artifacts = @(
+            ".github/workflows/ci.yml",
+            ".gitignore",
+            "CONTRIBUTING.md",
+            "LICENSE",
+            "README.md",
+            "SECURITY.md",
+            "docs/OSS_GENESIS.md",
+            "tests/validate-local-router-lr14-scope.ps1",
+            "tests/validate-oss-genesis.ps1",
+            "tests/validate-repo.ps1")
+        Markers   = @{
+            ".github/workflows/ci.yml" = "persist-credentials: false"
+            ".gitignore" = "# Codex / Router user configuration and local tool state"
+            "CONTRIBUTING.md" = "Slice registration (LR-14 scope gate)"
+            "LICENSE" = "Version 2.0, January 2004"
+            "README.md" = "not affiliated with, endorsed by or sponsored by OpenAI"
+            "SECURITY.md" = "Reporting a vulnerability"
+            "docs/OSS_GENESIS.md" = "Open-source repository genesis"
+            "tests/validate-local-router-lr14-scope.ps1" = "OSS-GENESIS: open-source repository root"
+            "tests/validate-oss-genesis.ps1" = "OSS genesis validation PASSED"
+            "tests/validate-repo.ps1" = "OSS genesis validation passed"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
