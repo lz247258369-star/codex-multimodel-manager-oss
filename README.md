@@ -2,6 +2,17 @@
 
 Windows-oriented Codex multi-model manager for a **ChatGPT official-model first, fallback when needed** workflow.
 
+## Open source
+
+- Licensed under the [Apache License 2.0](LICENSE).
+- This is an independent community project. It is **not affiliated with, endorsed by or sponsored by OpenAI**;
+  "Codex" and "ChatGPT" are referenced only to describe compatibility.
+- Provided **as is, without warranty** (see the licence). You are responsible for your Provider accounts,
+  API keys and any usage charges.
+- Report security problems privately as described in [SECURITY.md](SECURITY.md); contribution rules are in
+  [CONTRIBUTING.md](CONTRIBUTING.md).
+- History starts at a sanitized import; see [docs/OSS_GENESIS.md](docs/OSS_GENESIS.md).
+
 ## Runtime requirements
 
 - Windows
@@ -260,3 +271,4 @@ CI never calls paid model inference and never mutates the real user Codex config
 ## Security
 
 This repository must never contain real API key values, Codex `auth.json`, user project data, or runtime state under `~/.codex/`.
+Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).

@@ -150,6 +150,63 @@ if (-not [string]::IsNullOrWhiteSpace($script:Lr14SliceCommit)) {
 }
 $script:SliceIdentityKnown = (-not [string]::IsNullOrWhiteSpace($script:Lr14SliceCommit)) -and (-not [string]::IsNullOrWhiteSpace($script:Lr14SliceBase))
 
+# --- OSS-GENESIS: open-source repository root ----------------------------------
+# The open-source history starts at ONE sanitized import commit of the private
+# development repository (main 1bc5985cc961). The historical LR-14 slice
+# c36c7e58845a..e3d60a8eeffe is not part of this history, so the commit that
+# introduced this validator is the root and has no parent. Genesis mode accepts
+# exactly that shape and nothing else: a single root commit, which introduced
+# this validator, whose tree is byte-for-byte the reviewed import tree pinned
+# below. Any other root or a second root keeps the historical fail-closed
+# behaviour. The LR-14 slice file list is pinned because its range cannot be
+# re-read here. See docs/OSS_GENESIS.md.
+$script:OssGenesisTree = "8dd01f4f772e95fbcbb140d3850c8814a4d71f3e"
+$script:OssGenesisSourceCommit = "1bc5985cc9614c93f9a46261f9b8e0d9c87a7229"
+$script:OssGenesisLr14Slice = "c36c7e58845a8d45947aa71226f59723b8dd1f7f..e3d60a8eeffe0e4a74bc899a93b97aaff222dc0e"
+$script:OssGenesisLr14Files = @(
+    ".github/workflows/ci.yml",
+    "docs/LOCAL_ROUTER_V4_UI.md",
+    "installer/scripts/visual-console-entry.ps1",
+    "installer/scripts/visual-console.ps1",
+    "installer/scripts/visual-router-runtime.ps1",
+    "installer/ui/visual-console.xaml",
+    "tests/fixtures/local-router/v4-ui/control-plane-policy-configured.json",
+    "tests/fixtures/local-router/v4-ui/control-plane-policy.json",
+    "tests/fixtures/local-router/v4-ui/control-plane-requests.json",
+    "tests/fixtures/local-router/v4-ui/control-plane-status-health-unavailable.json",
+    "tests/fixtures/local-router/v4-ui/control-plane-status.json",
+    "tests/fixtures/local-router/v4-ui/control-plane-usage-missing.json",
+    "tests/fixtures/local-router/v4-ui/control-plane-usage-multi-currency.json",
+    "tests/fixtures/local-router/v4-ui/control-plane-usage-partial.json",
+    "tests/fixtures/local-router/v4-ui/control-plane-usage.json",
+    "tests/fixtures/local-router/v4-ui/fake-control-plane.ps1",
+    "tests/fixtures/local-router/v4-ui/router-config-corrupt.json",
+    "tests/fixtures/local-router/v4-ui/router-config-disabled.json",
+    "tests/fixtures/local-router/v4-ui/router-config-enabled.json",
+    "tests/fixtures/local-router/v4-ui/router-config-nonloopback.json",
+    "tests/shared/protected-file-scope.ps1",
+    "tests/validate-local-router-ingress.ps1",
+    "tests/validate-local-router-lr14-scope-regression.ps1",
+    "tests/validate-local-router-lr14-scope.ps1",
+    "tests/validate-local-router-lr14p-control-plane.ps1",
+    "tests/validate-local-router-metering-remediation.ps1",
+    "tests/validate-local-router-registries.ps1",
+    "tests/validate-local-router-v4-ui.ps1")
+$script:OssGenesisMode = $false
+if (-not [string]::IsNullOrWhiteSpace($script:Lr14SliceCommit) -and [string]::IsNullOrWhiteSpace($script:Lr14SliceBase)) {
+    $genesisRoots = @(Get-GitLines @("rev-list", "--max-parents=0", "HEAD"))
+    $genesisTree = ""
+    if ($genesisRoots.Count -eq 1) { $genesisTree = [string](@(Get-GitLines @("rev-parse", "--verify", "--quiet", "$($genesisRoots[0])^{tree}")) | Select-Object -First 1) }
+    if ($genesisRoots.Count -eq 1 -and $genesisRoots[0] -ceq $script:Lr14SliceCommit -and $genesisTree -ceq $script:OssGenesisTree) {
+        $script:OssGenesisMode = $true
+        $script:SliceIdentityKnown = $true
+        Write-Host "OSS-GENESIS: verified single root $(Short $genesisRoots[0]) with the pinned sanitized import tree $(Short $script:OssGenesisTree) (source $(Short $script:OssGenesisSourceCommit))" -ForegroundColor Cyan
+    }
+    else {
+        Write-Host "OSS-GENESIS: not applicable (roots=$($genesisRoots.Count)); the historical fail-closed behaviour applies" -ForegroundColor Yellow
+    }
+}
+
 $script:RegisteredSlices = @(
     [pscustomobject]@{
         Name      = "LR-14"
@@ -826,7 +883,7 @@ $script:RegisteredSlices = @(
     }
 )
 
-$lr14SliceCommits = if ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
+$lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
 $deltaCommits = @(Get-GitLines @("rev-list", "$($baseInfo.MergeBase)..$($script:ReviewedHeadRef)"))
 # When the slice cannot be identified (for example a synthetic fixture), keep the
 # historical fully-applicable behaviour instead of degrading to N/A.
@@ -838,11 +895,18 @@ if (-not $isLr14Slice) {
     Write-Host "N/A  evidence: LR-14 slice = $(Short $script:Lr14SliceBase)..$(Short $script:Lr14SliceCommit) ($($lr14SliceCommits.Count) commit(s)); registered reviewed slices = $((@($script:RegisteredSlices | ForEach-Object { $_.Name })) -join ', ')" -ForegroundColor Yellow
 
     # 1. The LR-14 slice identity must still be intact and reachable.
-    $sliceBaseResolved = @(Get-GitLines @("rev-parse", "--verify", "--quiet", "$($script:Lr14SliceBase)^{commit}"))
-    $sliceTipResolved = @(Get-GitLines @("rev-parse", "--verify", "--quiet", "$($script:Lr14SliceCommit)^{commit}"))
-    Assert-True ($sliceBaseResolved.Count -gt 0 -and $sliceTipResolved.Count -gt 0) "N/A 1: the LR-14 slice commits are still present"
-    Assert-True ($lr14SliceCommits.Count -eq 1) "N/A 1: the LR-14 slice is exactly one committed slice"
-    Assert-True (Test-GitAncestor $script:Lr14SliceCommit "HEAD") "N/A 1: the LR-14 slice is still an ancestor of HEAD (historical evidence reachable)"
+    if ($script:OssGenesisMode) {
+        Assert-True (@(Get-GitLines @("rev-list", "--max-parents=0", "HEAD")).Count -eq 1) "N/A 1 (OSS-GENESIS): the history has exactly one root commit"
+        Assert-True (Test-GitAncestor $script:Lr14SliceCommit "HEAD") "N/A 1 (OSS-GENESIS): the verified genesis root is an ancestor of HEAD"
+        Assert-True ($script:OssGenesisLr14Files.Count -eq 28) "N/A 1 (OSS-GENESIS): the historical LR-14 slice $($script:OssGenesisLr14Slice) is pinned with its 28 files"
+    }
+    else {
+        $sliceBaseResolved = @(Get-GitLines @("rev-parse", "--verify", "--quiet", "$($script:Lr14SliceBase)^{commit}"))
+        $sliceTipResolved = @(Get-GitLines @("rev-parse", "--verify", "--quiet", "$($script:Lr14SliceCommit)^{commit}"))
+        Assert-True ($sliceBaseResolved.Count -gt 0 -and $sliceTipResolved.Count -gt 0) "N/A 1: the LR-14 slice commits are still present"
+        Assert-True ($lr14SliceCommits.Count -eq 1) "N/A 1: the LR-14 slice is exactly one committed slice"
+        Assert-True (Test-GitAncestor $script:Lr14SliceCommit "HEAD") "N/A 1: the LR-14 slice is still an ancestor of HEAD (historical evidence reachable)"
+    }
 
     # 2. Every commit of the current delta must belong to a registered reviewed
     #    slice whose authority artifacts are present. Unregistered commits fail.
@@ -892,7 +956,7 @@ if (-not $isLr14Slice) {
     }
 
     # 3. The LR-14 slice's own files must still exist (a deletion is a change).
-    $lr14Files = @(Get-GitLines @("diff", "--name-only", "--no-renames", $script:Lr14SliceBase, $script:Lr14SliceCommit) | Sort-Object -Unique)
+    $lr14Files = if ($script:OssGenesisMode) { @($script:OssGenesisLr14Files | Sort-Object -Unique) } else { @(Get-GitLines @("diff", "--name-only", "--no-renames", $script:Lr14SliceBase, $script:Lr14SliceCommit) | Sort-Object -Unique) }
     $deletedLr14Files = @($lr14Files | Where-Object { -not (Test-Path -LiteralPath (Join-Path $RepositoryRoot $_) -PathType Leaf) })
     if ($deletedLr14Files.Count -eq 0) {
         Pass "N/A 3: no file owned by the LR-14 slice has been deleted"

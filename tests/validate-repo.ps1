@@ -392,6 +392,25 @@ if (Test-Path -LiteralPath $lifecycleValidator -PathType Leaf) {
 }
 else { Add-Fail "Missing required path: tests/validate-router-host-lifecycle.ps1" }
 
+# OSS-GENESIS: the LR-14 gate's genesis mode must stay fail-closed on real
+# histories (forged root, second root, unregistered commit) in this repository.
+$genesisValidator = Join-Path $RepositoryRoot "tests/validate-oss-genesis.ps1"
+if (Test-Path -LiteralPath $genesisValidator -PathType Leaf) {
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $genesisOutput = & (Get-Process -Id $PID).Path -NoLogo -NoProfile -File $genesisValidator -RepositoryRoot $RepositoryRoot 2>&1
+        $genesisExit = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previousPreference }
+    foreach ($line in $genesisOutput) {
+        if ([string]$line -match '^OSS_GENESIS_SUMMARY ') { Write-Host ([string]$line) }
+    }
+    if ($genesisExit -eq 0) { Add-Pass "OSS genesis validation passed" }
+    else { Add-Fail "OSS genesis validation failed (exit $genesisExit)"; Write-Host ($genesisOutput | Out-String) }
+}
+else { Add-Fail "Missing required path: tests/validate-oss-genesis.ps1" }
+
 Write-Host "Validation summary" -ForegroundColor Cyan
 Write-Host "PASS: $($script:Passes.Count)"
 Write-Host "FAIL: $($script:Failures.Count)"

@@ -24,8 +24,11 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        # Pinned to the commit of the reviewed v4 tag (supply-chain hardening).
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          # The job never pushes; do not leave a token in .git/config.
+          persist-credentials: false
           # The LR-14 scope validator reviews the committed branch delta
           # (merge-base of origin/main and HEAD), so the base ref must be
           # present in the checkout - also for the detached-HEAD pull_request
@@ -37,7 +40,7 @@ jobs:
         run: $PSVersionTable | Format-List
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: 10.0.400
           cache: true

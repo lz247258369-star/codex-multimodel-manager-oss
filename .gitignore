@@ -14,6 +14,16 @@ discovery-baseline.json
 model-history.jsonl
 NEW_MODELS_FOUND.txt
 
+# Codex / Router user configuration and local tool state
+config.toml
+router.config.json
+.codex/
+.claude/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
 # Local backups / generated runtime state
 backups/
 handoffs/
