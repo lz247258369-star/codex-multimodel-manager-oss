@@ -13,6 +13,14 @@ Windows-oriented Codex multi-model manager for a **ChatGPT official-model first,
   [CONTRIBUTING.md](CONTRIBUTING.md).
 - History starts at a sanitized import; see [docs/OSS_GENESIS.md](docs/OSS_GENESIS.md).
 
+## 开源说明
+
+- 本项目采用 [Apache License 2.0](LICENSE) 授权。
+- 这是独立的社区项目，**与 OpenAI 没有关联，也未获得 OpenAI 的认可或赞助**；文中提到 "Codex"、"ChatGPT" 只用于说明兼容性。
+- 本项目**按"现状"提供，不附带任何担保**（见许可证）。Provider 账户、API Key 及其产生的费用由使用者自行负责。
+- 安全问题请按 [SECURITY.md](SECURITY.md) 私下报告；贡献规则见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+- 仓库历史从一次经过脱敏的源码导入开始，详见 [docs/OSS_GENESIS.md](docs/OSS_GENESIS.md)。
+
 ## Runtime requirements
 
 - Windows
