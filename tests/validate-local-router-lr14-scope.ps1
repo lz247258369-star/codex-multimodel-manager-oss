@@ -912,6 +912,17 @@ $script:RegisteredSlices = @(
             "tests/validate-repo.ps1" = "OSS genesis validation passed"
         }
     }
+    # OSS-M1-README-ZH: Chinese open-source section of the README. Documentation only.
+    [pscustomobject]@{
+        Name      = "OSS-M1-README-ZH"
+        Base      = "e6420d897a6becd7954d59a1f2f378696ea0ce80"
+        Tip       = "776c0ab8529a4ab3330a6c582e0c5b5e79696ff6"
+        Artifacts = @(
+            "README.md")
+        Markers   = @{
+            "README.md" = "## 开源说明"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
