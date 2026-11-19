@@ -411,6 +411,43 @@ if (Test-Path -LiteralPath $genesisValidator -PathType Leaf) {
 }
 else { Add-Fail "Missing required path: tests/validate-oss-genesis.ps1" }
 
+# Reproducible build: CI runs dotnet from the repository root, and the .NET host
+# resolves global.json from the current directory upward. The root global.json
+# must equal local-router/global.json, and the SDK resolved at the root and in
+# local-router/ must be that exact pin. The SDK an unpinned directory resolves is
+# printed for diagnosis only (it is what the root build used without a root pin).
+$rootSdkPin = Join-Path $RepositoryRoot "global.json"
+$routerSdkPin = Join-Path $RepositoryRoot "local-router/global.json"
+if ((Test-Path -LiteralPath $rootSdkPin -PathType Leaf) -and (Test-Path -LiteralPath $routerSdkPin -PathType Leaf)) {
+    $rootPinText = ([System.IO.File]::ReadAllText($rootSdkPin)) -replace "`r`n", "`n"
+    $routerPinText = ([System.IO.File]::ReadAllText($routerSdkPin)) -replace "`r`n", "`n"
+    $pin = ($routerPinText | ConvertFrom-Json).sdk
+    if ($rootPinText -cne $routerPinText) { Add-Fail "The repository-root global.json differs from local-router/global.json" }
+    elseif ([string]$pin.version -notmatch '^\d+\.\d+\.\d+$' -or [string]$pin.rollForward -cne "disable") { Add-Fail "The .NET SDK pin must be an exact version with rollForward disable" }
+    elseif (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { Add-Fail "dotnet is not available to verify the pinned .NET SDK" }
+    else {
+        function Get-ResolvedSdk([string]$Directory) {
+            $previousPreference = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            Push-Location -LiteralPath $Directory
+            try { $value = @(& dotnet --version 2>&1); $code = $LASTEXITCODE }
+            finally { Pop-Location; $ErrorActionPreference = $previousPreference }
+            if ($code -ne 0) { return "unresolved(exit $code)" }
+            return ([string]($value | Select-Object -Last 1)).Trim()
+        }
+        $unpinnedDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("sdk-resolution-" + [guid]::NewGuid().ToString("N"))
+        $null = New-Item -ItemType Directory -Path $unpinnedDirectory
+        try { $unpinnedSdk = Get-ResolvedSdk $unpinnedDirectory }
+        finally { Remove-Item -LiteralPath $unpinnedDirectory -Force }
+        $rootSdk = Get-ResolvedSdk $RepositoryRoot
+        $routerSdk = Get-ResolvedSdk (Join-Path $RepositoryRoot "local-router")
+        Write-Host "SDK resolution: pinned=$($pin.version) repository-root=$rootSdk local-router=$routerSdk unpinned-directory=$unpinnedSdk"
+        if ($rootSdk -ceq [string]$pin.version -and $routerSdk -ceq [string]$pin.version) { Add-Pass "dotnet resolves the pinned .NET SDK $($pin.version) at the repository root and in local-router" }
+        else { Add-Fail "dotnet does not resolve the pinned .NET SDK $($pin.version) (repository root: $rootSdk, local-router: $routerSdk)" }
+    }
+}
+else { Add-Fail "Missing .NET SDK pin: global.json and local-router/global.json are both required" }
+
 Write-Host "Validation summary" -ForegroundColor Cyan
 Write-Host "PASS: $($script:Passes.Count)"
 Write-Host "FAIL: $($script:Failures.Count)"
