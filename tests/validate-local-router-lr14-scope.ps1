@@ -923,6 +923,42 @@ $script:RegisteredSlices = @(
             "README.md" = "## 开源说明"
         }
     }
+    # OSS-M1-FIX1: genesis evidence for the history-dependent FIX5 and HS1B-RB1
+    # validators (fail-closed, verified genesis root only; private behaviour unchanged),
+    # test-only third-party licences and pinned test clocks for the LR-10 metering
+    # tests. Tests and docs only; no product, Provider, routing, installer or UI code.
+    [pscustomobject]@{
+        Name      = "OSS-M1-FIX1"
+        Base      = "7673318d64cb76be7801827bef809cbdfca641f4"
+        Tip       = "0344c0c292a2b31245d58295fd8cc6c3109019eb"
+        Artifacts = @(
+            "docs/OSS_GENESIS.md",
+            "docs/THIRD_PARTY_LICENSES.md",
+            "local-router/tests/Router.Core.Tests/Host/Lr10ProductionMeteringHostTests.cs",
+            "local-router/tests/Router.Execution.Tests/Lr10RProductionExecutionMeteringE2ETests.cs",
+            "tests/fixtures/oss-genesis/hs1b-rb1-earlier-router-codex-cli.patch",
+            "tests/shared/fix5-patch-identity.ps1",
+            "tests/shared/oss-genesis.ps1",
+            "tests/validate-dsr7c-apply-patch-file-authorization-regression.ps1",
+            "tests/validate-dsr7c-apply-patch-file-authorization.ps1",
+            "tests/validate-dsr7c-apply-patch-final-integration.ps1",
+            "tests/validate-local-router-hs1b-rb1-scope.ps1",
+            "tests/validate-oss-genesis.ps1")
+        Markers   = @{
+            "docs/OSS_GENESIS.md" = "## Other history-dependent validators"
+            "docs/THIRD_PARTY_LICENSES.md" = "# Third-party licences"
+            "local-router/tests/Router.Core.Tests/Host/Lr10ProductionMeteringHostTests.cs" = "private sealed class PinnedTestClock"
+            "local-router/tests/Router.Execution.Tests/Lr10RProductionExecutionMeteringE2ETests.cs" = "Price_older_than_the_freshness_window_is_reported_stale"
+            "tests/fixtures/oss-genesis/hs1b-rb1-earlier-router-codex-cli.patch" = "index 62a2e6160becccf409dee176be661ef4950e9762..05664423e8fb111551acf7cc9621f1d54ec7cd92"
+            "tests/shared/fix5-patch-identity.ps1" = "# --- OSS-GENESIS: FIX5 review evidence for the open-source history"
+            "tests/shared/oss-genesis.ps1" = "function Get-OssGenesisRoot"
+            "tests/validate-dsr7c-apply-patch-file-authorization-regression.ps1" = "# --- OSS-GENESIS regression"
+            "tests/validate-dsr7c-apply-patch-file-authorization.ps1" = "OSS-GENESIS: the private FIX5 objects are not part of this history"
+            "tests/validate-dsr7c-apply-patch-final-integration.ps1" = "OSS-GENESIS: the private FIX5 objects are not part of this history"
+            "tests/validate-local-router-hs1b-rb1-scope.ps1" = "OSS-GENESIS: the earlier reviewed router-codex-cli blob"
+            "tests/validate-oss-genesis.ps1" = "real_git_histories=7 mocks=0"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
