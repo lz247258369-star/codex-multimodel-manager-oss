@@ -972,6 +972,29 @@ $script:RegisteredSlices = @(
             "tests/validate-dsr7c-apply-patch-file-authorization-regression.ps1" = "Git's error text is never passed on as an id"
         }
     }
+    # OSS-M3-FIX3-CA2026: nine adapter test fixtures build their tool parameter schema with
+    # JsonElement.Parse(string) instead of an undisposed JsonDocument (CA2026). Test code only;
+    # no assertion, analyzer, warnings-as-errors, product or CI change.
+    [pscustomobject]@{
+        Name      = "OSS-M3-FIX3-CA2026"
+        Base      = "e4e7b5ddf3f4bc9b6a1a6b2d186e8f1b8403e41f"
+        Tip       = "d7160d911979bba3639c7d431b9c39f62fbb621a"
+        Artifacts = @(
+            "local-router/tests/Router.ProviderAdapters.DeepSeek.Tests/DeepSeekRequestMappingTests.cs",
+            "local-router/tests/Router.ProviderAdapters.MiMo.Tests/MiMoRequestMappingTests.cs",
+            "local-router/tests/Router.ProviderAdapters.ModelStudio.Tests/ModelStudioRequestMappingTests.cs",
+            "local-router/tests/Router.ProviderAdapters.OpenAI.Tests/OpenAIRequestMappingTests.cs",
+            "local-router/tests/Router.ProviderAdapters.OpenRouter.Tests/OpenRouterRequestMappingTests.cs",
+            "local-router/tests/Router.ProviderAdapters.Tests/ResponsesProviderCodecTests.cs")
+        Markers   = @{
+            "local-router/tests/Router.ProviderAdapters.DeepSeek.Tests/DeepSeekRequestMappingTests.cs" = "Parameters = JsonElement.Parse(`"`"`"{`"type`":`"object`"}`"`"`"),"
+            "local-router/tests/Router.ProviderAdapters.MiMo.Tests/MiMoRequestMappingTests.cs" = "Parameters = JsonElement.Parse(`"`"`"{`"type`":`"object`"}`"`"`"),"
+            "local-router/tests/Router.ProviderAdapters.ModelStudio.Tests/ModelStudioRequestMappingTests.cs" = "Parameters = JsonElement.Parse(`"`"`"{`"type`":`"object`"}`"`"`"),"
+            "local-router/tests/Router.ProviderAdapters.OpenAI.Tests/OpenAIRequestMappingTests.cs" = "Parameters = JsonElement.Parse(`"`"`"{`"type`":`"object`"}`"`"`"),"
+            "local-router/tests/Router.ProviderAdapters.OpenRouter.Tests/OpenRouterRequestMappingTests.cs" = "Parameters = System.Text.Json.JsonElement.Parse(`"`"`"{`"type`":`"object`"}`"`"`"),"
+            "local-router/tests/Router.ProviderAdapters.Tests/ResponsesProviderCodecTests.cs" = "JsonElement.Parse(parameterSchema)"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
