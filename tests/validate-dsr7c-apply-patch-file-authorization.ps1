@@ -135,12 +135,26 @@ function Get-Fix5FileMarkerErrors([string]$RelativePath, [string]$Text) {
 # accepted only when every reviewed patch resolves to exactly one ordered,
 # linear, non-merge equivalent commit inside HEAD's ancestry.
 $chainTail = $script:Fix5Chain[$script:Fix5Chain.Count - 1][1]
-foreach ($entry in $script:Fix5Chain) {
-    $resolved = @(Get-GitLines @("rev-parse", "--verify", "--quiet", "$($entry[1])^{commit}"))
-    Assert-True ($resolved.Count -gt 0) "1: $($entry[0]) commit $($entry[1].Substring(0, 8)) is present"
-}
 $script:Fix5Identity = Resolve-Fix5ReviewedIdentity -RepositoryRoot $RepositoryRoot -Base $script:Fix5Base -Chain $script:Fix5Chain
-if ($script:Fix5Identity.Mode -eq "legacy") {
+if ($script:Fix5Identity.Mode -ne "genesis") {
+    foreach ($entry in $script:Fix5Chain) {
+        $resolved = @(Get-GitLines @("rev-parse", "--verify", "--quiet", "$($entry[1])^{commit}"))
+        Assert-True ($resolved.Count -gt 0) "1: $($entry[0]) commit $($entry[1].Substring(0, 8)) is present"
+    }
+}
+if ($script:Fix5Identity.Mode -eq "genesis") {
+    # OSS-GENESIS: the private FIX5 objects are not part of this history. The
+    # recorded review (original SHAs, stable patch-ids, source-main equivalents)
+    # is accepted only for the verified genesis root and is bound to its objects.
+    Write-Host "NOTE  OSS-GENESIS: the FIX5 review is the recorded evidence bound to the verified genesis root $($script:Fix5Identity.GenesisRoot.Substring(0, 12))" -ForegroundColor Yellow
+    Assert-True ($script:Fix5Identity.Errors.Count -eq 0) "1 (OSS-GENESIS): the FIX5 base/chain pins equal the recorded review and every reviewed FIX5 file is the reviewed blob at the verified genesis root"
+    foreach ($fix5Error in $script:Fix5Identity.Errors) { Fail "1: $fix5Error" }
+    foreach ($mappingLine in $script:Fix5Identity.Mapping) {
+        $mappingParts = $mappingLine -split '\|'
+        Write-Host "      fix5 identity: $($mappingParts[0])  $(([string]$mappingParts[1]).Substring(0, 8)) -> patch-id $($mappingParts[2]) -> $($mappingParts[3])" -ForegroundColor Cyan
+    }
+}
+elseif ($script:Fix5Identity.Mode -eq "legacy") {
     Assert-True (Test-GitAncestor $chainTail "HEAD") "1: the approved FIX5 chain tail is an ancestor of HEAD"
 }
 elseif ($script:Fix5Identity.Mode -eq "portable") {
@@ -160,12 +174,26 @@ else {
 }
 
 # --- 2. Registered files are still the reviewed FIX5 content ----------------
-$script:Fix5OriginalPatchIdMap = Get-Fix5PatchIdMap -RepositoryRoot $RepositoryRoot -TipRef $chainTail
-$script:Fix5CurrentPatchIdMap = Get-Fix5PatchIdMap -RepositoryRoot $RepositoryRoot -TipRef "HEAD"
+$script:Fix5Genesis = ($script:Fix5Identity.Mode -eq "genesis")
+if (-not $script:Fix5Genesis) {
+    $script:Fix5OriginalPatchIdMap = Get-Fix5PatchIdMap -RepositoryRoot $RepositoryRoot -TipRef $chainTail
+    $script:Fix5CurrentPatchIdMap = Get-Fix5PatchIdMap -RepositoryRoot $RepositoryRoot -TipRef "HEAD"
+}
 foreach ($relativePath in $script:Fix5FileOwners.Keys) {
     $approvedOwner = [string]$script:Fix5FileOwners[$relativePath]
     $owner = @(Get-GitLines @("log", "-1", "--format=%H", "--", $relativePath))
-    if ($owner.Count -ne 1) {
+    if ($script:Fix5Genesis) {
+        # OSS-GENESIS: ownership by the reviewed patch is replaced by ownership by
+        # the verified genesis root plus the reviewed blob at root and HEAD.
+        $evidence = @($script:Fix5Identity.Files | Where-Object { $_.Path -ceq $relativePath })
+        if ($evidence.Count -eq 1) {
+            Write-Host ("      owner: {0} | reviewed blob {1} | genesis {2} | HEAD {3} | owner {4}" -f (Split-Path $relativePath -Leaf), $evidence[0].ReviewedBlob.Substring(0, 8), `
+                    $(if ($evidence[0].GenesisBlob) { $evidence[0].GenesisBlob.Substring(0, 8) } else { 'missing' }), $(if ($evidence[0].HeadBlob) { $evidence[0].HeadBlob.Substring(0, 8) } else { 'missing' }), `
+                    $(if ($evidence[0].Owner) { $evidence[0].Owner.Substring(0, 8) } else { 'none' })) -ForegroundColor Cyan
+        }
+        Assert-True ($evidence.Count -eq 1 -and $evidence[0].Ok) "2 (OSS-GENESIS): $(Split-Path $relativePath -Leaf) is still the reviewed FIX5 blob, owned by the verified genesis root"
+    }
+    elseif ($owner.Count -ne 1) {
         Fail "2: $(Split-Path $relativePath -Leaf) has no single current owner commit"
     }
     else {

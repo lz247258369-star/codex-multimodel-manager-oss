@@ -24,6 +24,12 @@ public sealed class Lr10ProductionMeteringHostTests
         ],
         """;
 
+    // The metering fixture prices are dated 2026-08-01 and production treats a
+    // price as stale 90 days later. The Host runs on a test clock pinned inside
+    // that window instead of the wall clock, so the expected Complete estimate
+    // does not change with the calendar. The production rule is unchanged.
+    private static readonly DateTimeOffset PinnedNow = new(2026, 8, 15, 0, 0, 0, TimeSpan.Zero);
+
     [Fact]
     public async Task Enabled_host_wires_production_metering_and_redacted_log()
     {
@@ -65,6 +71,7 @@ public sealed class Lr10ProductionMeteringHostTests
                 pathProvider,
                 secretResolver: resolver,
                 responsesService: service,
+                clock: new PinnedTestClock(PinnedNow),
                 meteringService: metering,
                 pricingSnapshot: pricing,
                 cancellationToken: cts.Token);
@@ -147,9 +154,26 @@ public sealed class Lr10ProductionMeteringHostTests
         byte[] bytes = File.ReadAllBytes(fixture);
         CatalogProjectionResult projection = ModelCatalogProjector.Project(bytes, "catalog.v3.metering.json", "test-sha");
         projection.Validate();
-        PricingProjectionResult pricing = PricingProjector.Project(projection.Projection!, DateTimeOffset.UtcNow);
+        PricingProjectionResult pricing = PricingProjector.Project(projection.Projection!, PinnedNow);
         Assert.True(pricing.IsSuccess);
         return pricing.Snapshot!;
+    }
+
+    /// <summary>
+    /// Starts at a pinned instant and then advances with real elapsed time, so
+    /// Host timing behaves normally while dates stay deterministic.
+    /// </summary>
+    private sealed class PinnedTestClock : Router.Core.Abstractions.IClock
+    {
+        private readonly DateTimeOffset _start;
+        private readonly System.Diagnostics.Stopwatch _elapsed = System.Diagnostics.Stopwatch.StartNew();
+
+        public PinnedTestClock(DateTimeOffset start)
+        {
+            _start = start;
+        }
+
+        public DateTimeOffset UtcNow => _start + _elapsed.Elapsed;
     }
 
     private static int GetFreePort()

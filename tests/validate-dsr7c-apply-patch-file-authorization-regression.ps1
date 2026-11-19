@@ -148,6 +148,201 @@ $script:RecutBase = "9a90d9e02d2e71245dfe4b46ddd17b9abe2aceab"
 $script:FinalIntegrationValidator = "tests/validate-dsr7c-apply-patch-final-integration.ps1"
 $script:FileAuthorizationValidator = "tests/validate-dsr7c-apply-patch-file-authorization.ps1"
 
+# --- OSS-GENESIS regression ----------------------------------------------------
+# The cases below re-cut PRIVATE commits (PR2/PR3 members and the original FIX5
+# chain). The open-source history contains none of them and must never import
+# them. Only when the repository under test lacks the frozen fixture milestone
+# AND is the verified genesis history (tests/shared/oss-genesis.ps1) does this
+# section run the genesis equivalents of every rejection property, on real Git
+# fixtures, and exit with its own verdict. Any other repository runs the
+# original cases unchanged (and still fails closed when the milestone is absent).
+. (Join-Path $RepositoryRoot "tests/shared/oss-genesis.ps1")
+$script:GenesisRecutProbe = Invoke-Git $RepositoryRoot @("cat-file", "-e", "$($script:RecutBase)^{commit}")
+if ($script:GenesisRecutProbe.Code -ne 0 -and -not [string]::IsNullOrWhiteSpace((Get-OssGenesisRoot $RepositoryRoot))) {
+    $genesisValidators = @($script:FinalIntegrationValidator, $script:FileAuthorizationValidator, "tests/shared/fix5-patch-identity.ps1", "tests/shared/oss-genesis.ps1")
+    $genesisTemp = Join-Path ([System.IO.Path]::GetTempPath()) ("fix5-genesis-" + [guid]::NewGuid().ToString("N"))
+    $genesisReviewed = "local-router/src/Router.ProviderAdapters.DeepSeek/ApplyPatchResponseBridge.cs"
+    function Set-GenesisCase([string]$Name, [string]$From) {
+        Require-True ((Invoke-Git $script:FixtureRoot @("checkout", "-q", "-f", "-B", $Name, $From)).Code -eq 0) "genesis case $Name could not start from $From"
+        foreach ($relative in $genesisValidators) {
+            $destination = Join-Path $script:FixtureRoot $relative
+            New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
+            Copy-Item -LiteralPath (Join-Path $RepositoryRoot $relative) -Destination $destination -Force
+        }
+    }
+    function Get-GenesisExits([string]$Root) {
+        return [pscustomobject]@{ Auth = (Get-ValidatorExitCode $Root $script:FileAuthorizationValidator); Final = (Get-ValidatorExitCode $Root $script:FinalIntegrationValidator) }
+    }
+    function Edit-GenesisFile([string]$Relative, [string]$Old, [string]$New) {
+        $path = Join-Path $script:FixtureRoot $Relative
+        $text = [System.IO.File]::ReadAllText($path)
+        Require-True ($text.Contains($Old)) "genesis fixture anchor not found in $Relative"
+        [System.IO.File]::WriteAllText($path, $text.Replace($Old, $New), [System.Text.UTF8Encoding]::new($false))
+    }
+    New-Item -ItemType Directory -Force -Path $genesisTemp | Out-Null
+    try {
+        $fixture = Join-Path $genesisTemp "fixture"
+        Require-True ((Invoke-Git $RepositoryRoot @("clone", "--quiet", "--no-hardlinks", "--local", $RepositoryRoot, $fixture)).Code -eq 0) "unable to clone the genesis repository under test"
+        $script:FixtureRoot = $fixture
+        $genesisHead = Get-GitLine $fixture @("rev-parse", "HEAD")
+        Require-True (-not [string]::IsNullOrWhiteSpace((Get-OssGenesisRoot $fixture))) "the genesis fixture clone is not the verified genesis history"
+        Pass "genesis setup: real clone of the verified genesis history at $($genesisHead.Substring(0, 12)); no private object imported"
+
+        # GA (for A): the imported reviewed FIX5 content passes both gates.
+        Set-GenesisCase "genesisA" $genesisHead
+        $exits = Get-GenesisExits $fixture
+        Assert-True ($exits.Auth -eq 0) "GA: the verified genesis history passes the FIX5 file-authorization gate"
+        Assert-True ($exits.Final -eq 0) "GA: the verified genesis history passes the FIX5 final-integration gate"
+
+        # GB (for C/D/E): a reviewed file changed after genesis fails both gates.
+        Set-GenesisCase "genesisB" $genesisHead
+        [System.IO.File]::AppendAllText((Join-Path $fixture $genesisReviewed), "`n// post-genesis mutation`n")
+        Require-True (Commit-All $fixture "test: mutate a reviewed file after genesis") "GB could not commit the mutation"
+        $exits = Get-GenesisExits $fixture
+        Assert-True ($exits.Auth -ne 0 -and $exits.Final -ne 0) "GB: a reviewed FIX5 file modified after genesis fails both gates"
+
+        # GC (for G): change and restore - identical content, but not owned by genesis.
+        Set-GenesisCase "genesisC" $genesisHead
+        $reviewedBytes = [System.IO.File]::ReadAllBytes((Join-Path $fixture $genesisReviewed))
+        [System.IO.File]::AppendAllText((Join-Path $fixture $genesisReviewed), "`n// temporary`n")
+        Require-True (Commit-All $fixture "test: temporary change") "GC could not commit the change"
+        [System.IO.File]::WriteAllBytes((Join-Path $fixture $genesisReviewed), $reviewedBytes)
+        Require-True (Commit-All $fixture "test: restore reviewed bytes") "GC could not commit the restore"
+        $exits = Get-GenesisExits $fixture
+        Assert-True ($exits.Auth -ne 0 -and $exits.Final -ne 0) "GC: restored-but-rewritten reviewed content is no longer the genesis review and fails both gates"
+
+        # GD (for F): a reviewed FIX5 surface removed after genesis.
+        Set-GenesisCase "genesisD" $genesisHead
+        Require-True ((Invoke-Git $fixture @("rm", "-q", "local-router/src/Router.ProviderAdapters.DeepSeek/ApplyPatchStreamBridge.cs")).Code -eq 0) "GD could not remove the surface"
+        Require-True (Commit-All $fixture "test: remove a reviewed FIX5 surface") "GD could not commit the removal"
+        $exits = Get-GenesisExits $fixture
+        Assert-True ($exits.Auth -ne 0 -and $exits.Final -ne 0) "GD: a missing reviewed FIX5 surface fails both gates"
+
+        # GE (for H): the reviewed chain consumed in the wrong order.
+        Set-GenesisCase "genesisE" $genesisHead
+        foreach ($validator in @($script:FinalIntegrationValidator, $script:FileAuthorizationValidator)) {
+            $path = Join-Path $fixture $validator
+            $lines = [System.IO.File]::ReadAllLines($path)
+            for ($index = 0; $index -lt $lines.Count; $index++) {
+                if ($lines[$index] -match "@\('B1b-1', 'cf543bc9") { $lines[$index] = $lines[$index].Replace('B1b-1', 'B1b-2').Replace('cf543bc9c814d0bd049351117b8fc7b307593602', 'd0981d30c4b6162db033803c49da5e98f27a0d59') }
+                elseif ($lines[$index] -match "@\('B1b-2', 'd0981d30") { $lines[$index] = $lines[$index].Replace('B1b-2', 'B1b-1').Replace('d0981d30c4b6162db033803c49da5e98f27a0d59', 'cf543bc9c814d0bd049351117b8fc7b307593602') }
+            }
+            [System.IO.File]::WriteAllLines($path, $lines)
+        }
+        $exits = Get-GenesisExits $fixture
+        Assert-True ($exits.Auth -ne 0 -and $exits.Final -ne 0) "GE: a reviewed chain pin in the wrong order fails both gates"
+
+        # GF (for M): a wrong original source pin.
+        Set-GenesisCase "genesisF" $genesisHead
+        Edit-GenesisFile $script:FinalIntegrationValidator "@('B1b-2', 'd0981d30c4b6162db033803c49da5e98f27a0d59')" "@('B1b-2', '1ec68e0bcf06396076a7defe572501a2c77eece3')"
+        Assert-True ((Get-ValidatorExitCode $fixture $script:FinalIntegrationValidator) -ne 0) "GF: a wrong original source pin fails the gate"
+
+        # GG (new): forged genesis evidence - a reviewed blob pin altered.
+        Set-GenesisCase "genesisG" $genesisHead
+        Edit-GenesisFile "tests/shared/fix5-patch-identity.ps1" '= "e428ef5013a7ffe41a6a32ae494b4d037a9033d1"' '= "0000000000000000000000000000000000000000"'
+        $exits = Get-GenesisExits $fixture
+        Assert-True ($exits.Auth -ne 0 -and $exits.Final -ne 0) "GG: a forged reviewed-blob pin in the genesis evidence fails both gates"
+
+        # GH (new): wrong genesis baseline - the pinned genesis tree altered.
+        Set-GenesisCase "genesisH" $genesisHead
+        Edit-GenesisFile "tests/shared/oss-genesis.ps1" '$script:OssGenesisTreePin = "8dd01f4f772e95fbcbb140d3850c8814a4d71f3e"' '$script:OssGenesisTreePin = "0000000000000000000000000000000000000000"'
+        $exits = Get-GenesisExits $fixture
+        Assert-True ($exits.Auth -ne 0) "GH: a wrong genesis baseline pin disables genesis evidence and the file-authorization gate fails closed"
+        Set-GenesisCase "genesisH-missing" $genesisHead
+        [System.IO.File]::Delete((Join-Path $fixture "tests/shared/oss-genesis.ps1"))
+        $exits = Get-GenesisExits $fixture
+        Assert-True ($exits.Auth -ne 0) "GH: a deleted genesis detector yields no genesis evidence and the file-authorization gate fails closed"
+
+        # GI (new): forged root - the same shape with a different root tree.
+        Set-GenesisCase "genesisI" $genesisHead
+        $genesisRootSha = Get-OssGenesisRoot $fixture
+        $env:GIT_INDEX_FILE = Join-Path $genesisTemp "forged.index"
+        try {
+            Require-True ((Invoke-Git $fixture @("read-tree", $genesisRootSha)).Code -eq 0) "GI could not read the genesis tree"
+            $forgedBlob = Get-GitLine $fixture @("hash-object", "-w", "--", "LICENSE")
+            Require-True ((Invoke-Git $fixture @("update-index", "--add", "--cacheinfo", "100644,$forgedBlob,FORGED.txt")).Code -eq 0) "GI could not forge the root tree"
+            $forgedTree = Get-GitLine $fixture @("write-tree")
+        }
+        finally { Remove-Item Env:\GIT_INDEX_FILE -ErrorAction SilentlyContinue }
+        $forgedRoot = Get-GitLine $fixture @("commit-tree", $forgedTree, "-m", "forged root")
+        $replayed = Get-GitLine $fixture @("-c", "user.name=fix5-regression", "-c", "user.email=fix5-regression@local", "commit-tree", "$genesisHead^{tree}", "-p", $forgedRoot, "-m", "replayed head on forged root")
+        Set-GenesisCase "genesisI-forged" $replayed
+        Assert-True ([string]::IsNullOrWhiteSpace((Get-OssGenesisRoot $fixture)) -and (Get-ValidatorExitCode $fixture $script:FileAuthorizationValidator) -ne 0) "GI: a forged root tree is never the verified genesis and the file-authorization gate fails closed"
+
+        # GJ (new): a second, unrelated root merged into the history.
+        Set-GenesisCase "genesisJ" $genesisHead
+        $orphanTree = Get-GitLine $fixture @("mktree")
+        $orphan = Get-GitLine $fixture @("-c", "user.name=fix5-regression", "-c", "user.email=fix5-regression@local", "commit-tree", $orphanTree, "-m", "unrelated root")
+        $merged = Get-GitLine $fixture @("-c", "user.name=fix5-regression", "-c", "user.email=fix5-regression@local", "commit-tree", "$genesisHead^{tree}", "-p", $genesisHead, "-p", $orphan, "-m", "merge unrelated root")
+        Set-GenesisCase "genesisJ-merged" $merged
+        Assert-True ([string]::IsNullOrWhiteSpace((Get-OssGenesisRoot $fixture)) -and (Get-ValidatorExitCode $fixture $script:FileAuthorizationValidator) -ne 0) "GJ: a second root disables genesis evidence and the file-authorization gate fails closed"
+
+        # GK (for I): a merge commit can never become the owner of reviewed content.
+        Set-GenesisCase "genesisK-side" $genesisHead
+        [System.IO.File]::AppendAllText((Join-Path $fixture $genesisReviewed), "`n// side branch`n")
+        # Only the reviewed file changes on the side branch (never the validator copies).
+        Require-True ((Invoke-Git $fixture @("add", "--", $genesisReviewed)).Code -eq 0) "GK could not stage the side change"
+        Require-True ((Invoke-Git $fixture @("-c", "user.name=fix5-regression", "-c", "user.email=fix5-regression@local", "commit", "-q", "-m", "test: side change")).Code -eq 0) "GK could not commit the side change"
+        Set-GenesisCase "genesisK" $genesisHead
+        Require-True ((Invoke-Git $fixture @("-c", "user.name=fix5-regression", "-c", "user.email=fix5-regression@local", "merge", "--no-ff", "--no-edit", "genesisK-side")).Code -eq 0) "GK could not merge the side branch"
+        foreach ($relative in $genesisValidators) { Copy-Item -LiteralPath (Join-Path $RepositoryRoot $relative) -Destination (Join-Path $fixture $relative) -Force }
+        $exits = Get-GenesisExits $fixture
+        Assert-True ($exits.Auth -ne 0 -and $exits.Final -ne 0) "GK: reviewed content arriving through a merge fails both gates"
+        $probeRelative = "tests/fixtures/lr15-g8f-conflict-probe.txt"
+        $conflictStable = $true
+        for ($attempt = 1; $attempt -le 3; $attempt++) {
+            Set-GenesisCase "genesisK-a-$attempt" $genesisHead
+            Set-Content -LiteralPath (Join-Path $fixture $probeRelative) -Value "probe side a`n" -Encoding utf8
+            Require-True (Commit-All $fixture "fixture: probe side a") "GK could not commit probe side a"
+            Set-GenesisCase "genesisK-b-$attempt" $genesisHead
+            Set-Content -LiteralPath (Join-Path $fixture $probeRelative) -Value "probe side b`n" -Encoding utf8
+            Require-True (Commit-All $fixture "fixture: probe side b") "GK could not commit probe side b"
+            Set-GenesisCase "genesisK-m-$attempt" "genesisK-a-$attempt"
+            if ((Invoke-Git $fixture @("-c", "user.name=fix5-regression", "-c", "user.email=fix5-regression@local", "merge", "--no-ff", "--no-edit", "genesisK-b-$attempt")).Code -eq 0) { $conflictStable = $false }
+            Invoke-Git $fixture @("merge", "--abort") | Out-Null
+        }
+        Assert-True $conflictStable "GK: the dedicated probe fixture conflicts deterministically on every attempt (3/3)"
+
+        # GL (for J): deleting the file-authorization review revokes it.
+        Set-GenesisCase "genesisL" $genesisHead
+        Require-True ((Invoke-Git $fixture @("rm", "-q", "-f", $script:FileAuthorizationValidator)).Code -eq 0) "GL could not delete the review"
+        Require-True (Commit-All $fixture "test: delete the FIX5 file-authorization review") "GL could not commit the deletion"
+        Assert-True ((Get-ValidatorExitCodeFrom -Root $fixture -ScriptPath (Join-Path $RepositoryRoot $script:FileAuthorizationValidator)) -ne 0) "GL: deleting the FIX5 file-authorization review revokes the authorization"
+
+        # GM (for K): a reviewed marker removed.
+        Set-GenesisCase "genesisM" $genesisHead
+        Edit-GenesisFile "local-router/src/Router.ProviderAdapters.DeepSeek/ApplyPatchStreamBridge.cs" 'public static class ApplyPatchStreamBridge' 'public static class ApplyPatchStreamBridgeRenamed'
+        Require-True (Commit-All $fixture "test: remove a reviewed marker") "GM could not commit the marker removal"
+        foreach ($relative in $genesisValidators) { Copy-Item -LiteralPath (Join-Path $RepositoryRoot $relative) -Destination (Join-Path $fixture $relative) -Force }
+        Assert-True ((Get-ValidatorExitCode $fixture $script:FileAuthorizationValidator) -ne 0) "GM: removing a reviewed marker fails the gate"
+
+        # GN (for L): an unauthorized extra protected file.
+        Set-GenesisCase "genesisN" $genesisHead
+        $extraRelative = "local-router/src/Router.ProviderAdapters.DeepSeek/UnauthorizedExtraBridge.cs"
+        [System.IO.File]::WriteAllText((Join-Path $fixture $extraRelative), "// unauthorized`n")
+        Require-True (Commit-All $fixture "test: add an unauthorized protected file") "GN could not commit the extra protected file"
+        $hookProbe = & pwsh -NoProfile -Command ". (Join-Path '$fixture' 'tests/shared/protected-file-scope.ps1'); if (Test-Lr13ProtectedFileChangeAuthorized '$fixture' '$extraRelative') { 'AUTHORIZED' } else { 'REVOKED' }"
+        Assert-True (@($hookProbe) -contains "REVOKED") "GN: an unauthorized extra protected file is not authorized by the FIX5 registration"
+    }
+    finally {
+        Remove-Item Env:\GIT_INDEX_FILE -ErrorAction SilentlyContinue
+        $tempBase = [System.IO.Path]::GetTempPath().TrimEnd('\', '/')
+        if ($genesisTemp.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and
+            (Split-Path -Leaf $genesisTemp).StartsWith("fix5-genesis-", [System.StringComparison]::Ordinal)) {
+            Remove-Item -LiteralPath $genesisTemp -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Write-Host ""
+    Write-Host "NOTE  OSS-GENESIS: original cases A-N re-cut private commits that this history must never contain; their rejection properties ran as GA-GN above. The acceptance of a re-cut private chain (B, N) has no open-source equivalent." -ForegroundColor Yellow
+    if ($failures.Count -gt 0) {
+        Write-Host "FIX5 reviewed-identity portability regression FAILED ($($failures.Count) failures)" -ForegroundColor Red
+        foreach ($failure in $failures) { Write-Host " - $failure" -ForegroundColor Red }
+        exit 1
+    }
+    Write-Host "FIX5 reviewed-identity portability regression PASSED" -ForegroundColor Green
+    exit 0
+}
+
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("fix5-portability-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
 

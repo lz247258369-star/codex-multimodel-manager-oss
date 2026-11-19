@@ -166,6 +166,35 @@ function Save-GitBlob([string]$Spec, [string]$Destination) {
     return ($process.ExitCode -eq 0)
 }
 
+# OSS-GENESIS: the earlier reviewed router-codex-cli blob (private object
+# 05664423e8fb) is rebuilt from the verified genesis root's blob and the reviewed
+# reverse patch. The result must be byte-for-byte that blob (git object id).
+. (Join-Path $RepositoryRoot "tests/shared/oss-genesis.ps1")
+$script:Hs1bEarlierReviewedBlob = "05664423e8fb111551acf7cc9621f1d54ec7cd92"
+$script:Hs1bEarlierReversePatch = "tests/fixtures/oss-genesis/hs1b-rb1-earlier-router-codex-cli.patch"
+function Restore-Hs1bEarlierRouterCli([string]$GenesisRoot, [string]$Destination, [string]$WorkRoot) {
+    if (-not (Save-GitBlob "$($GenesisRoot):installer/scripts/router-codex-cli.ps1" $Destination)) { return $false }
+    $patchSource = Join-Path $RepositoryRoot $script:Hs1bEarlierReversePatch
+    if (-not (Test-Path -LiteralPath $patchSource -PathType Leaf)) { return $false }
+    # The checkout may have converted the fixture to CRLF; the blob bytes are LF.
+    $patchText = ([System.IO.File]::ReadAllText($patchSource)) -replace "`r`n", "`n"
+    $patchFile = Join-Path $WorkRoot "hs1b-earlier.patch"
+    [System.IO.File]::WriteAllText($patchFile, $patchText, [System.Text.UTF8Encoding]::new($false))
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        # No line-ending conversion: the rebuilt bytes must equal the blob exactly.
+        & git -C $WorkRoot -c core.autocrlf=false -c core.eol=lf apply --whitespace=nowarn $patchFile 2>$null | Out-Null
+        $applied = ($LASTEXITCODE -eq 0)
+        $blob = @(& git hash-object --no-filters $Destination 2>$null)
+    }
+    finally {
+        $ErrorActionPreference = $previous
+        [System.IO.File]::Delete($patchFile)
+    }
+    return ($applied -and $blob.Count -eq 1 -and ([string]$blob[0]).Trim() -ceq $script:Hs1bEarlierReviewedBlob)
+}
+
 # --- Fail-closed proofs ------------------------------------------------------
 # Every scenario runs against a throw-away directory tree in the system temp
 # folder. The repository under test is read, never modified.
@@ -267,6 +296,23 @@ try {
         }
         else {
             Fail "HS1C-INSTALLER: the earlier reviewed DSR7-B-FIX1 router-codex-cli version is no longer authorized"
+        }
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace(($genesisRoot = Get-OssGenesisRoot $RepositoryRoot))) {
+        # OSS-GENESIS: the earlier blob is private history. It is reconstructed
+        # from the verified genesis root's own blob plus the reviewed reverse
+        # patch, and must reproduce the recorded private blob id and the pin that
+        # the GENESIS ROOT itself carries (not merely the working-tree pin).
+        $restored = Restore-Hs1bEarlierRouterCli -GenesisRoot $genesisRoot -Destination $tempModule -WorkRoot $tempRoot
+        $genesisScope = @(Get-OssGenesisGitLines $RepositoryRoot @("show", "$($genesisRoot):tests/shared/protected-file-scope.ps1"))
+        $genesisPin = ([regex]::Match(($genesisScope -join "`n"), 'Hs1bRb1ApprovedRouterCliSha256 = "([0-9a-f]{64})"')).Groups[1].Value
+        if ($restored -and $genesisPin -ceq $script:Hs1bRb1ApprovedRouterCliSha256 -and
+            (Get-NormalizedFileSha256 $tempModule) -eq $genesisPin -and
+            (Test-Lr13ProtectedFileChangeAuthorized $tempRoot "installer/scripts/router-codex-cli.ps1")) {
+            Pass "HS1C-INSTALLER (OSS-GENESIS): the earlier reviewed DSR7-B-FIX1 router-codex-cli version, reconstructed from the verified genesis root, is still authorized by its own genesis pin"
+        }
+        else {
+            Fail "HS1C-INSTALLER (OSS-GENESIS): the earlier reviewed router-codex-cli version could not be reproduced from the verified genesis root and the reviewed reverse patch"
         }
     }
     else {

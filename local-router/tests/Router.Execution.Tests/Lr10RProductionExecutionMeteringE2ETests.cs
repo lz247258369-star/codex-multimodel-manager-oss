@@ -31,6 +31,14 @@ public sealed class Lr10RProductionExecutionMeteringE2ETests
 {
     private const string MeteredCatalogModelId = "z-ai/glm-5.3";
 
+    // The metering fixture prices are dated 2026-08-01 and production treats a
+    // price as stale 90 days later. The pipeline runs on a test clock pinned
+    // inside that window, never on the wall clock, so the results do not change
+    // with the calendar. The two freshness tests below prove both sides of the
+    // unchanged production boundary through the same real pipeline.
+    private static readonly DateTimeOffset FixturePriceEffectiveAt = new(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset PinnedNow = FixturePriceEffectiveAt.AddDays(14);
+
     [Fact]
     public async Task Non_stream_real_execution_attributes_authoritative_usage_and_cost()
     {
@@ -237,13 +245,50 @@ public sealed class Lr10RProductionExecutionMeteringE2ETests
         }
     }
 
+    [Fact]
+    public async Task Price_inside_the_freshness_window_is_a_complete_estimate()
+    {
+        RequestMeteringRecord record = await MeterNonStreamAtAsync(
+            FixturePriceEffectiveAt + CostEstimator.DefaultStaleAfter - TimeSpan.FromDays(1));
+        Assert.Equal(CostEstimateStatus.Complete, record.CostEstimate!.Status);
+        Assert.Equal(FixturePriceEffectiveAt, record.CostEstimate.EffectiveAt);
+        Assert.Equal(0.00125m, record.CostEstimate.TotalCost);
+    }
+
+    [Fact]
+    public async Task Price_older_than_the_freshness_window_is_reported_stale()
+    {
+        RequestMeteringRecord record = await MeterNonStreamAtAsync(
+            FixturePriceEffectiveAt + CostEstimator.DefaultStaleAfter + TimeSpan.FromDays(1));
+        Assert.Equal(CostEstimateStatus.StalePrice, record.CostEstimate!.Status);
+        Assert.Equal(FixturePriceEffectiveAt, record.CostEstimate.EffectiveAt);
+        Assert.Equal(0.00125m, record.CostEstimate.TotalCost);
+    }
+
+    private static async Task<RequestMeteringRecord> MeterNonStreamAtAsync(DateTimeOffset completedAround)
+    {
+        ProviderExecutionSpec spec = ExecutionTestConfigFactory.OpenRouter;
+        await using ProductionRouterContext context = await StartAsync(
+            spec,
+            scenario: FakeProviderScenario.Json(200, NonStreamJsonWithUsage100_25()),
+            clock: new PinnedTestClock(completedAround));
+        using HttpResponseMessage response = await context.PostAsync(
+            """{"model":"client-model-openrouter","input":"hi"}""");
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        RequestMeteringRecord record = await WaitForMeteringRecordAsync(context.Metering, TimeSpan.FromSeconds(10));
+        Assert.Equal(RequestMeteringStatus.Recorded, record.Status);
+        Assert.NotNull(record.CostEstimate);
+        return record;
+    }
+
     private static async Task<ProductionRouterContext> StartAsync(
         ProviderExecutionSpec? spec,
         FakeProviderScenario? scenario,
         EffectiveRouterConfigSnapshot? snapshot = null,
         RouterExecutionPolicySet? policies = null,
         HttpMessageHandler? transportHandler = null,
-        IReadOnlyDictionary<string, string>? endpointOverrides = null)
+        IReadOnlyDictionary<string, string>? endpointOverrides = null,
+        IClock? clock = null)
     {
         FakeProviderServer? server = null;
         if (scenario is not null)
@@ -304,7 +349,7 @@ public sealed class Lr10RProductionExecutionMeteringE2ETests
             serviceResult.Error?.Code + ": " + serviceResult.Error?.Message + " (" + serviceResult.Error?.Param + ")");
         RouterExecutionResponsesService service = serviceResult.Service!;
 
-        SystemClock clock = new();
+        clock ??= new PinnedTestClock(PinnedNow);
         RequestMeteringService metering = new(pricing: LoadPricingSnapshot());
         ProductionCompletionObserver observer = new(metering, requestLog: null, clock);
 
@@ -410,9 +455,26 @@ public sealed class Lr10RProductionExecutionMeteringE2ETests
         byte[] bytes = File.ReadAllBytes(fixture);
         CatalogProjectionResult projection = ModelCatalogProjector.Project(bytes, "catalog.v3.metering.json", "test-sha");
         projection.Validate();
-        PricingProjectionResult pricing = PricingProjector.Project(projection.Projection!, DateTimeOffset.UtcNow);
+        PricingProjectionResult pricing = PricingProjector.Project(projection.Projection!, PinnedNow);
         Assert.True(pricing.IsSuccess);
         return pricing.Snapshot!;
+    }
+
+    /// <summary>
+    /// Starts at a pinned instant and then advances with real elapsed time, so
+    /// timeouts and ordering behave normally while dates stay deterministic.
+    /// </summary>
+    private sealed class PinnedTestClock : IClock
+    {
+        private readonly DateTimeOffset _start;
+        private readonly System.Diagnostics.Stopwatch _elapsed = System.Diagnostics.Stopwatch.StartNew();
+
+        public PinnedTestClock(DateTimeOffset start)
+        {
+            _start = start;
+        }
+
+        public DateTimeOffset UtcNow => _start + _elapsed.Elapsed;
     }
 
     private static string NonStreamJsonWithUsage100_25()

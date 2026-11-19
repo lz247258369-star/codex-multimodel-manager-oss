@@ -154,7 +154,47 @@ try {
     $r = Invoke-Gate $c $child
     Assert-True (-not $r.text.Contains('OSS-GENESIS')) '6 control: a parented validator commit never enters genesis mode'
 
-    Write-Host "OSS_GENESIS_SUMMARY PASS=$passes FAIL=$($failures.Count) real_git_histories=5 mocks=0"
+    # 7. One genesis baseline: the LR-14 gate's inline pin and the shared pin
+    #    used by the FIX5 and HS1B-RB1 validators are the same reviewed tree.
+    $sharedPin = ([regex]::Match((Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'tests/shared/oss-genesis.ps1')), '\$script:OssGenesisTreePin = "([0-9a-f]{40})"')).Groups[1].Value
+    Assert-True ($sharedPin -ceq $pinned -and $sharedPin -ceq $rootTree) '7 the LR-14 inline genesis pin and the shared genesis pin are the same reviewed tree'
+
+    # 8. HS1B-RB1 earlier-version evidence: reconstructed only from the verified
+    #    genesis root and the reviewed reverse patch; tampering fails closed.
+    $hs1bFiles = @('tests/validate-local-router-hs1b-rb1-scope.ps1', 'tests/shared/oss-genesis.ps1', 'tests/fixtures/oss-genesis/hs1b-rb1-earlier-router-codex-cli.patch')
+    function Invoke-Hs1b([string]$Repo) {
+        $out = @(& $hostPath -NoLogo -NoProfile -File (Join-Path $Repo 'tests/validate-local-router-hs1b-rb1-scope.ps1') -RepositoryRoot $Repo 2>&1)
+        $script:LastGate = [pscustomobject]@{ code = $LASTEXITCODE; text = ($out -join "`n") }
+        return $script:LastGate
+    }
+    function Copy-Hs1bIntoClone([string]$Repo) {
+        foreach ($relative in $hs1bFiles) {
+            $destination = Join-Path $Repo $relative
+            $null = New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent)
+            Copy-Item -LiteralPath (Join-Path $RepositoryRoot $relative) -Destination $destination -Force
+        }
+    }
+    $c = New-Clone; Copy-Hs1bIntoClone $c
+    $r = Invoke-Hs1b $c
+    Assert-True ($r.code -eq 0 -and $r.text.Contains('HS1C-INSTALLER (OSS-GENESIS): the earlier reviewed')) '8a HS1B-RB1: the earlier reviewed version is reconstructed from the verified genesis root and stays authorized'
+    $patchPath = Join-Path $c 'tests/fixtures/oss-genesis/hs1b-rb1-earlier-router-codex-cli.patch'
+    $patchText = [IO.File]::ReadAllText($patchPath)
+    $tampered = [regex]::Replace($patchText, '(?m)^\+(\s*)(\S)', '+$1#$2', 1)
+    [IO.File]::WriteAllText($patchPath, $tampered)
+    $r = Invoke-Hs1b $c
+    Assert-True ($tampered -cne $patchText -and $r.code -ne 0 -and $r.text.Contains('could not be reproduced from the verified genesis root')) '8b HS1B-RB1: a tampered reverse patch cannot reproduce the reviewed blob and fails closed'
+    [IO.File]::Delete($patchPath)
+    $r = Invoke-Hs1b $c
+    Assert-True ($r.code -ne 0 -and $r.text.Contains('could not be reproduced from the verified genesis root')) '8c HS1B-RB1: missing reverse-patch evidence fails closed'
+    $c = New-Clone; Copy-Hs1bIntoClone $c
+    $orphan = Invoke-Git $c @('commit-tree', (Invoke-Git $c @('mktree')), '-m', 'unrelated root')
+    $merged = Invoke-Git $c @('commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-p', $orphan, '-m', 'merge unrelated root')
+    $null = Invoke-Git $c @('checkout', '-q', '--detach', $merged)
+    Copy-Hs1bIntoClone $c
+    $r = Invoke-Hs1b $c
+    Assert-True ($r.code -ne 0 -and $r.text.Contains('earlier reviewed router-codex-cli blob is not available')) '8d HS1B-RB1: without the verified genesis (second root) the original fail-closed result is kept'
+
+    Write-Host "OSS_GENESIS_SUMMARY PASS=$passes FAIL=$($failures.Count) real_git_histories=7 mocks=0"
     if ($failures.Count) { exit 1 }
     Write-Host 'OSS genesis validation PASSED'
 }

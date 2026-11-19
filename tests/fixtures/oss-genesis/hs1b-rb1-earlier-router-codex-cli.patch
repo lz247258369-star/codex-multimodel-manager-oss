@@ -1,0 +1,86 @@
+diff --git a/installer/scripts/router-codex-cli.ps1 b/installer/scripts/router-codex-cli.ps1
+index 62a2e6160becccf409dee176be661ef4950e9762..05664423e8fb111551acf7cc9621f1d54ec7cd92 100644
+--- a/installer/scripts/router-codex-cli.ps1
++++ b/installer/scripts/router-codex-cli.ps1
+@@ -1271,10 +1271,6 @@ function Merge-RouterBootstrapLocalRouter($DefaultLocal, $UserLocal) {
+         throw "Router user config field local_router must be a JSON object."
+     }
+     $allowed = @("enabled", "host", "port", "client_auth", "limits", "thread_selection")
+-    # Optional schema-v1 fields that the canonical defaults deliberately omit, so
+-    # their absence keeps the default (HS-1C: quota_failover_enabled -> false).
+-    # Only these exact names are admitted; every other unknown key still fails.
+-    $optionalNested = @{ thread_selection = @("quota_failover_enabled") }
+     $merged = [ordered]@{}
+     foreach ($key in $DefaultLocal.Keys) { $merged[$key] = $DefaultLocal[$key] }
+     foreach ($key in $UserLocal.Keys) {
+@@ -1286,9 +1282,8 @@ function Merge-RouterBootstrapLocalRouter($DefaultLocal, $UserLocal) {
+             }
+             $base = [ordered]@{}
+             foreach ($nestedKey in $DefaultLocal[$key].Keys) { $base[$nestedKey] = $DefaultLocal[$key][$nestedKey] }
+-            $optional = if ($optionalNested.ContainsKey($key)) { @($optionalNested[$key]) } else { @() }
+             foreach ($nestedKey in $nested.Keys) {
+-                if (-not $base.Contains($nestedKey) -and $nestedKey -cnotin $optional) {
++                if (-not $base.Contains($nestedKey)) {
+                     throw "Router user config field is not part of schema v1: local_router.$key.$nestedKey"
+                 }
+                 $base[$nestedKey] = $nested[$nestedKey]
+@@ -1469,24 +1464,11 @@ function Get-RouterBootstrapDocumentErrors($Document) {
+         $errors.Add("local_router.thread_selection must be a JSON object.")
+     }
+     elseif (Test-RouterBootstrapEntityFields $threadSelection `
+-        @("enabled", "pending_ttl_ms", "active_idle_ttl_ms", "quota_failover_enabled") `
++        @("enabled", "pending_ttl_ms", "active_idle_ttl_ms") `
+         @("enabled", "pending_ttl_ms", "active_idle_ttl_ms") "local_router.thread_selection" $errors) {
+         if (-not (Test-RouterBootstrapBoolean $threadSelection["enabled"])) { $errors.Add("local_router.thread_selection.enabled must be a boolean.") }
+         if (-not (Test-RouterBootstrapIntegerInRange $threadSelection["pending_ttl_ms"] 30000 1800000)) { $errors.Add("local_router.thread_selection.pending_ttl_ms is out of range.") }
+         if (-not (Test-RouterBootstrapIntegerInRange $threadSelection["active_idle_ttl_ms"] 3600000 604800000)) { $errors.Add("local_router.thread_selection.active_idle_ttl_ms is out of range.") }
+-        # HS-1C (mirrors RouterConfigValidator.ValidateThreadSelection): optional,
+-        # absent means false; when present it must be a JSON boolean (never a
+-        # string, number, null, array or object), and true requires
+-        # thread_selection.enabled=true.
+-        if ($threadSelection.Contains("quota_failover_enabled")) {
+-            $quotaFailover = $threadSelection["quota_failover_enabled"]
+-            if (-not (Test-RouterBootstrapBoolean $quotaFailover)) {
+-                $errors.Add("local_router.thread_selection.quota_failover_enabled must be a boolean.")
+-            }
+-            elseif ($quotaFailover -and -not ($threadSelection["enabled"] -is [bool] -and $threadSelection["enabled"])) {
+-                $errors.Add("local_router.thread_selection.quota_failover_enabled=true requires local_router.thread_selection.enabled=true.")
+-            }
+-        }
+     }
+ 
+     Get-RouterBootstrapClientErrors $Document $errors
+@@ -2209,7 +2191,6 @@ function New-RouterBootstrapTargetDocument($Effective, $Plan, [int]$Port, [strin
+             active_idle_ttl_ms = [int]$local["thread_selection"]["active_idle_ttl_ms"]
+         }
+     }
+-    Copy-RouterBootstrapQuotaFailoverSetting $local["thread_selection"] $target["local_router"]["thread_selection"]
+     $target["clients"] = @(Merge-RouterBootstrapEntityArray $Effective["clients"] $generated.Clients "client_id")
+     $target["protocol_routes"] = @(Merge-RouterBootstrapEntityArray $Effective["protocol_routes"] $generated.ProtocolRoutes "protocol_route_id")
+     $target["provider_routes"] = @(Merge-RouterBootstrapEntityArray $Effective["provider_routes"] $generated.ProviderRoutes "provider_route_id")
+@@ -2221,17 +2202,6 @@ function New-RouterBootstrapTargetDocument($Effective, $Plan, [int]$Port, [strin
+     return $target
+ }
+ 
+-# HS-1C: an explicit quota_failover_enabled setting survives regeneration and
+-# canonicalization exactly as the user wrote it. The raw value is copied without
+-# a [bool] cast, so an invalid type is never masked and is rejected by
+-# Get-RouterBootstrapDocumentErrors on the generated document. An absent setting
+-# stays absent (default false): Initialize never adds or enables it.
+-function Copy-RouterBootstrapQuotaFailoverSetting($SourceThreadSelection, $TargetThreadSelection) {
+-    if ($SourceThreadSelection -is [System.Collections.IDictionary] -and $SourceThreadSelection.Contains("quota_failover_enabled")) {
+-        $TargetThreadSelection["quota_failover_enabled"] = $SourceThreadSelection["quota_failover_enabled"]
+-    }
+-}
+-
+ # Canonical field order for every entity kind, mirroring the schema documents.
+ function ConvertTo-RouterBootstrapCanonicalDocument($Document) {
+     $local = $Document["local_router"]
+@@ -2259,7 +2229,6 @@ function ConvertTo-RouterBootstrapCanonicalDocument($Document) {
+             active_idle_ttl_ms = [int]$local["thread_selection"]["active_idle_ttl_ms"]
+         }
+     }
+-    Copy-RouterBootstrapQuotaFailoverSetting $local["thread_selection"] $canonical["local_router"]["thread_selection"]
+     $canonical["clients"] = @(ConvertTo-RouterBootstrapCanonicalEntities $Document["clients"] "client_id" @(
+             "client_id", "adapter_id", "enabled", "auth_scope", "allowed_route_ids", "capabilities", "version"
+         ))

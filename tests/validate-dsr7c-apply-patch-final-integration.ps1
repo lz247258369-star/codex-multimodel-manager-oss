@@ -149,6 +149,19 @@ elseif ($fix5Identity.Mode -eq "portable") {
         Write-Host "      fix5 identity: $($mappingParts[0])  $(([string]$mappingParts[1]).Substring(0, 8)) -> patch-id $($mappingParts[2]) -> $($mappingParts[3])" -ForegroundColor Cyan
     }
 }
+elseif ($fix5Identity.Mode -eq "genesis") {
+    # OSS-GENESIS: the private FIX5 objects are not part of this history. The
+    # recorded review is accepted only for the verified genesis root and is bound
+    # to its objects (reviewed blob at genesis root and HEAD, owned by the root).
+    Write-Host "NOTE  OSS-GENESIS: the FIX5 chain identity is the recorded review bound to the verified genesis root $($fix5Identity.GenesisRoot.Substring(0, 12))" -ForegroundColor Yellow
+    Assert-True ($fix5Identity.Errors.Count -eq 0) "1 (OSS-GENESIS): the FIX5 base/chain pins equal the recorded review in order and every FIX5 surface is the reviewed blob at the verified genesis root"
+    foreach ($fix5Error in $fix5Identity.Errors) { Fail "1: $fix5Error" }
+    Assert-True (@($fix5Identity.Equivalents | Where-Object { $_ -cmatch '^[0-9a-f]{40}$' }).Count -eq $script:Fix5Chain.Count) "1 (OSS-GENESIS): every reviewed member has a recorded source-main equivalent"
+    foreach ($mappingLine in $fix5Identity.Mapping) {
+        $mappingParts = $mappingLine -split '\|'
+        Write-Host "      fix5 identity: $($mappingParts[0])  $(([string]$mappingParts[1]).Substring(0, 8)) -> patch-id $($mappingParts[2]) -> $($mappingParts[3])" -ForegroundColor Cyan
+    }
+}
 else {
     Write-Host "NOTE  the FIX5 base commit is not reachable in this clone; the chain check falls back to the file surfaces below" -ForegroundColor Yellow
 }
@@ -298,7 +311,24 @@ $protected = @(
     "installer/scripts/launch-controller-model.ps1",
     "installer/scripts/_registry.ps1"
 )
-if ($hasBase) {
+if ($fix5Identity.Mode -eq "genesis") {
+    # OSS-GENESIS: the FIX5 range lives in the private history. Its changed-file
+    # list is pinned (and integrity-checked) so the range predicates are
+    # re-evaluated here; byte-identity of the protected files across the range
+    # is the recorded result of the private gate and cannot be re-derived.
+    $genesisEvidence = $script:Fix5GenesisEvidence
+    $rangeFiles = @($genesisEvidence.RangeChangedFiles | Sort-Object)
+    $rangeDigest = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes(($rangeFiles -join "`n") + "`n"))).Replace('-', '').ToLowerInvariant()
+    Assert-True ($rangeDigest -ceq $genesisEvidence.RangeChangedFilesSha256 -and $rangeFiles.Count -eq 37) "13 (OSS-GENESIS): the recorded FIX5 range file list is intact (37 files, pinned digest)"
+    Assert-True ($genesisEvidence.RangeCommitCount -eq 8 -and $genesisEvidence.RangeProtectedByteIdentical -eq $true) "13 (OSS-GENESIS, recorded): the private FIX5 range $($genesisEvidence.RangeBase.Substring(0, 8))..$($genesisEvidence.RangeTail.Substring(0, 8)) kept every protected installer file byte-identical"
+    Assert-True (@($rangeFiles | Where-Object { $protected -contains $_ }).Count -eq 0) "13 (OSS-GENESIS): the FIX5 range modifies no protected installer file"
+    Assert-True (@($rangeFiles | Where-Object { $_ -match '^(installer/|skill/|docs/)' }).Count -eq 0) "13 (OSS-GENESIS): the FIX5 range stays out of installer, skill and docs surfaces"
+    Assert-True (-not ($rangeFiles | Where-Object { $_ -match '\.(sqlite|db|bin|dll|exe|zip|bak)$' })) "13 (OSS-GENESIS): the FIX5 range adds no binary, state or backup artifact"
+    foreach ($file in $protected) {
+        Assert-True (Test-PathExists $file) "13: protected file still present: $file"
+    }
+}
+elseif ($hasBase) {
     foreach ($file in $protected) {
         $baseBlob = @(Get-GitLines @("rev-parse", "$($script:Fix5RangeBase):$file"))
         $tailBlob = @(Get-GitLines @("rev-parse", "$($script:Fix5RangeTail):$file"))
