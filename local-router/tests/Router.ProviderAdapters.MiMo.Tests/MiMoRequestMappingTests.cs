@@ -90,7 +90,7 @@ public sealed class MiMoRequestMappingTests
                 {
                     Name = "get_weather",
                     Description = "weather",
-                    Parameters = JsonDocument.Parse("""{"type":"object"}""").RootElement.Clone(),
+                    Parameters = JsonElement.Parse("""{"type":"object"}"""),
                 },
             ],
         };
@@ -238,7 +238,7 @@ public sealed class MiMoRequestMappingTests
                 {
                     Name = "get_weather",
                     Description = "weather",
-                    Parameters = JsonDocument.Parse("""{"type":"object"}""").RootElement.Clone(),
+                    Parameters = JsonElement.Parse("""{"type":"object"}"""),
                 },
             ],
         };

@@ -92,7 +92,7 @@ public sealed class ModelStudioRequestMappingTests
                 {
                     Name = "get_weather",
                     Description = "weather",
-                    Parameters = JsonDocument.Parse("""{"type":"object"}""").RootElement.Clone(),
+                    Parameters = JsonElement.Parse("""{"type":"object"}"""),
                 },
             ],
         };

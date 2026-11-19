@@ -27,7 +27,7 @@ public sealed class ResponsesProviderCodecTests
         {
             Name = name,
             Description = description,
-            Parameters = parameterSchema is null ? null : JsonDocument.Parse(parameterSchema).RootElement.Clone(),
+            Parameters = parameterSchema is null ? null : JsonElement.Parse(parameterSchema),
             Strict = strict,
         };
 

@@ -87,7 +87,7 @@ public sealed class DeepSeekRequestMappingTests
                 {
                     Name = "get_weather",
                     Description = "weather",
-                    Parameters = JsonDocument.Parse("""{"type":"object"}""").RootElement.Clone(),
+                    Parameters = JsonElement.Parse("""{"type":"object"}"""),
                 },
             ],
             ToolChoice = new ToolChoice { Kind = ToolChoiceKind.Auto },
@@ -292,7 +292,7 @@ public sealed class DeepSeekRequestMappingTests
                 {
                     Name = "get_weather",
                     Description = "weather",
-                    Parameters = JsonDocument.Parse("""{"type":"object"}""").RootElement.Clone(),
+                    Parameters = JsonElement.Parse("""{"type":"object"}"""),
                 },
             ],
         };
