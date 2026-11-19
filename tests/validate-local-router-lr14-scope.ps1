@@ -959,6 +959,19 @@ $script:RegisteredSlices = @(
             "tests/validate-oss-genesis.ps1" = "real_git_histories=7 mocks=0"
         }
     }
+    # OSS-M1-FIX2: first public CI fix. The FIX5 regression's forged-root fixture
+    # commit gets the explicit test identity and Get-GitLine fails fast on Git errors.
+    # Test scaffolding only; no assertion, gate, product or installer change.
+    [pscustomobject]@{
+        Name      = "OSS-M1-FIX2"
+        Base      = "2b99eeaeea67ade923799b2642928154a85e045d"
+        Tip       = "5e8791fc43ed6e7701492017a5074fd189ed5195"
+        Artifacts = @(
+            "tests/validate-dsr7c-apply-patch-file-authorization-regression.ps1")
+        Markers   = @{
+            "tests/validate-dsr7c-apply-patch-file-authorization-regression.ps1" = "Git's error text is never passed on as an id"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
