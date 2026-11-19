@@ -65,7 +65,7 @@ public sealed class OpenRouterRequestMappingTests
                 {
                     Name = "get_weather",
                     Description = "weather",
-                    Parameters = System.Text.Json.JsonDocument.Parse("""{"type":"object"}""").RootElement.Clone(),
+                    Parameters = System.Text.Json.JsonElement.Parse("""{"type":"object"}"""),
                 },
             ],
         };
