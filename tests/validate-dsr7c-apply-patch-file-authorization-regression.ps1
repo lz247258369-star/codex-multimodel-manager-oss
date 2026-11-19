@@ -77,10 +77,16 @@ function Invoke-Git([string]$Root, [string[]]$Arguments) {
     return [pscustomobject]@{ Code = $code; Output = @($output | ForEach-Object { ([string]$_).Trim() }) }
 }
 
+# Every caller needs one Git object id. A failed Git command, or output that is
+# not exactly one object id, aborts the run as a setup failure that names the
+# command and Git's own message; Git's error text is never passed on as an id.
 function Get-GitLine([string]$Root, [string[]]$Arguments) {
     $result = Invoke-Git $Root $Arguments
-    if ($result.Output.Count -eq 0) { return "" }
-    return [string]$result.Output[0]
+    $ids = @($result.Output | Where-Object { $_ -cmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$' })
+    if ($result.Code -ne 0 -or $ids.Count -ne 1) {
+        throw "setup failure: git $($Arguments -join ' ') failed (exit $($result.Code), object ids $($ids.Count)): $(($result.Output | Where-Object { $_ }) -join ' | ')"
+    }
+    return [string]$ids[0]
 }
 
 function Get-ValidatorExitCode([string]$Root, [string]$ScriptName) {
@@ -264,7 +270,7 @@ if ($script:GenesisRecutProbe.Code -ne 0 -and -not [string]::IsNullOrWhiteSpace(
             $forgedTree = Get-GitLine $fixture @("write-tree")
         }
         finally { Remove-Item Env:\GIT_INDEX_FILE -ErrorAction SilentlyContinue }
-        $forgedRoot = Get-GitLine $fixture @("commit-tree", $forgedTree, "-m", "forged root")
+        $forgedRoot = Get-GitLine $fixture @("-c", "user.name=fix5-regression", "-c", "user.email=fix5-regression@local", "commit-tree", $forgedTree, "-m", "forged root")
         $replayed = Get-GitLine $fixture @("-c", "user.name=fix5-regression", "-c", "user.email=fix5-regression@local", "commit-tree", "$genesisHead^{tree}", "-p", $forgedRoot, "-m", "replayed head on forged root")
         Set-GenesisCase "genesisI-forged" $replayed
         Assert-True ([string]::IsNullOrWhiteSpace((Get-OssGenesisRoot $fixture)) -and (Get-ValidatorExitCode $fixture $script:FileAuthorizationValidator) -ne 0) "GI: a forged root tree is never the verified genesis and the file-authorization gate fails closed"
