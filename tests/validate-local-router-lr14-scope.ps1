@@ -995,6 +995,21 @@ $script:RegisteredSlices = @(
             "local-router/tests/Router.ProviderAdapters.Tests/ResponsesProviderCodecTests.cs" = "JsonElement.Parse(parameterSchema)"
         }
     }
+    # OSS-M3-FIX3-SDK-PIN: repository-root global.json identical to local-router/global.json
+    # (10.0.400, rollForward disable) so dotnet commands run from the root resolve the pinned
+    # SDK, and a fail-closed validate-repo check of the resolved SDK. No ci.yml, analyzer or test change.
+    [pscustomobject]@{
+        Name      = "OSS-M3-FIX3-SDK-PIN"
+        Base      = "38797e2b20cd10f3621654b82112f9d37cb105a1"
+        Tip       = "804b202a51b43b2d1c13ce423f8a739faf87cb19"
+        Artifacts = @(
+            "global.json",
+            "tests/validate-repo.ps1")
+        Markers   = @{
+            "global.json" = "`"rollForward`": `"disable`""
+            "tests/validate-repo.ps1" = "dotnet resolves the pinned .NET SDK"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
