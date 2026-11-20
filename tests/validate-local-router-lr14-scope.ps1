@@ -1068,6 +1068,24 @@ $script:RegisteredSlices = @(
             "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "U2 after the local identity changes, -ReuseReceipt fails"
         }
     }
+    # OSS-M4-1-FIX2-L1-ONLY-REUSE: receipt reuse limited to L1 static checks, history kept, base/merge-base/tool
+    # in the drift check for the workflow tools. Tools only; no CI, gate logic or registration change.
+    [pscustomobject]@{
+        Name      = "OSS-M4-1-FIX2-L1-ONLY-REUSE"
+        Base      = "2a43101fe6596b13525d3673e89b6a71ffb75dd4"
+        Tip       = "789405a795c57e96fb805661342da67caa65c992"
+        Artifacts = @(
+            "tools/oss-workflow/Invoke-TieredVerification.ps1",
+            "tools/oss-workflow/New-EvidenceReport.ps1",
+            "tools/oss-workflow/README.md",
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1")
+        Markers   = @{
+            "tools/oss-workflow/Invoke-TieredVerification.ps1" = "# Runtime checks (L2/L3/L4) are always executed again. An identical earlier"
+            "tools/oss-workflow/New-EvidenceReport.ps1" = "历史记录：存在相同的 {0} PASS 收据"
+            "tools/oss-workflow/README.md" = "**Reuse applies to L1 static checks only.**"
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "N1 L2 with -ReuseReceipt executes every runtime check again"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
