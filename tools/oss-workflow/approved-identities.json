@@ -1,0 +1,18 @@
+{
+  "schema": "oss-workflow.approved-identities/v1",
+  "description": "Commit identities approved for this public repository. Anything else is rejected. Only public GitHub noreply identities belong here.",
+  "author": [
+    { "label": "project-noreply", "name": "lz247258369-star", "email": "311615550+lz247258369-star@users.noreply.github.com" }
+  ],
+  "committer": [
+    { "label": "project-noreply", "name": "lz247258369-star", "email": "311615550+lz247258369-star@users.noreply.github.com" },
+    { "label": "github-web-merge", "name": "GitHub", "email": "noreply@github.com" }
+  ],
+  "committer_requires_approved_author": [ "github-web-merge" ],
+  "committer_merge_only": [ "github-web-merge" ],
+  "local_config": [
+    { "label": "project-noreply", "name": "lz247258369-star", "email": "311615550+lz247258369-star@users.noreply.github.com" }
+  ],
+  "message_email_exact": [ "noreply@github.com", "noreply@anthropic.com" ],
+  "message_email_suffix": [ "@users.noreply.github.com", "@example.invalid" ]
+}
