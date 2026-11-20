@@ -1050,6 +1050,24 @@ $script:RegisteredSlices = @(
             "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "R8 the receipt records the explicit FAIL line before diagnostic noise"
         }
     }
+    # OSS-M4-1-FIX1-REUSE-COVERAGE: receipt reuse re-checks identity live, level coverage, strict LR-14
+    # append detection for the workflow tools. Tools only; no CI, gate logic or registration change.
+    [pscustomobject]@{
+        Name      = "OSS-M4-1-FIX1-REUSE-COVERAGE"
+        Base      = "9605439ed770be42719d3f522742c8c1f5dd0680"
+        Tip       = "8d5cf0608d11ac35e954fa3c4fd867904f3db1c2"
+        Artifacts = @(
+            "tools/oss-workflow/Invoke-TieredVerification.ps1",
+            "tools/oss-workflow/OssWorkflow.psm1",
+            "tools/oss-workflow/README.md",
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1")
+        Markers   = @{
+            "tools/oss-workflow/Invoke-TieredVerification.ps1" = "# Identity privacy is always re-checked live; it is never taken from an old receipt."
+            "tools/oss-workflow/OssWorkflow.psm1" = "function Test-OwStaticRegistrationStatement"
+            "tools/oss-workflow/README.md" = "the identity privacy check is always re-run live"
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "U2 after the local identity changes, -ReuseReceipt fails"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
