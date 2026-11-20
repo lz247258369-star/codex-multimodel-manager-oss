@@ -41,8 +41,11 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'OssWorkflow.psm1') -Force
 $started = [DateTime]::UtcNow
 
+# Failure evidence: explicit FAIL lines first, then other error lines.
 function Get-Tail([string[]]$Lines, [string]$Root, [int]$Count = 3) {
-    return @($Lines | Where-Object { $_ -match '^\s*FAIL\b|error|failed' } | Select-Object -First $Count | ForEach-Object { ConvertTo-OwSafeText ($_.Trim()) $Root })
+    $fail = @($Lines | Where-Object { $_ -match '^\s*FAIL\b' })
+    $other = @($Lines | Where-Object { $_ -notmatch '^\s*FAIL\b' -and $_ -match '(?i)\berror\b|failed' })
+    return @(@($fail) + @($other) | Select-Object -First $Count | ForEach-Object { ConvertTo-OwSafeText ($_.Trim()) $Root })
 }
 
 function New-Check([string]$Id, [string]$Kind, [string]$Command, [scriptblock]$Action, [string]$Condition = $null) {

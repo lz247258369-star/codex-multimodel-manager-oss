@@ -235,10 +235,12 @@ try {
     $c1 = Save $fx 'fixture: docs and validator'
     $r = Run $V @('-RepositoryRoot', $fx)
     Assert ($r.Code -eq 0 -and $r.Text -match 'level=L2 required=L2 status=PASS' -and $r.Text -match 'l2:validator:validate-sample' -and $r.Text -match 'PASS\s+l2:lr14-scope') 'R7 a committed validator change runs L2 with the validator and the LR-14 gate'
-    Write-Text $fx 'tests/validate-sample.ps1' "param([string]`$RepositoryRoot)`nWrite-Output 'FAIL  sample broke'`nexit 1`n"
+    Write-Text $fx 'tests/validate-sample.ps1' "param([string]`$RepositoryRoot)`nWrite-Output 'PROBE_ERROR diagnostic noise'`nWrite-Output 'FAIL  sample broke'`nexit 1`n"
     $null = Save $fx 'fixture: break validator'
     $r = Run $V @('-RepositoryRoot', $fx)
     Assert ($r.Code -eq 1 -and $r.Text -match 'status=FAIL') 'R8 a failing validator makes L2 FAIL'
+    $failed = @((Get-Content -Raw @(Get-Receipts $fx)[-1].FullName | ConvertFrom-Json -DateKind String).checks | Where-Object { $_.status -eq 'FAIL' })[0]
+    Assert ($failed.failures[0] -eq 'FAIL  sample broke') 'R8 the receipt records the explicit FAIL line before diagnostic noise'
     Write-Text $fx 'tests/validate-sample.ps1' $sampleValidator
     $c3 = Save $fx 'fixture: repair validator'
 
