@@ -1010,6 +1010,33 @@ $script:RegisteredSlices = @(
             "tests/validate-repo.ps1" = "dotnet resolves the pinned .NET SDK"
         }
     }
+    # OSS-M4-1-WORKFLOW-TOOLS: developer tools under tools/oss-workflow (tiered verification, receipts,
+    # LR-14 registration candidates, identity privacy gate, evidence report) with their tests.
+    # Tools only; no product, CI workflow, gate logic, registration, analyzer or Git config change.
+    [pscustomobject]@{
+        Name      = "OSS-M4-1-WORKFLOW-TOOLS"
+        Base      = "c192c68069e8a8539c6fdbd4241e951dc4d34147"
+        Tip       = "8902b9e700386c387a60b5c999b7df69aa0202f4"
+        Artifacts = @(
+            "tools/oss-workflow/approved-identities.json",
+            "tools/oss-workflow/Invoke-TieredVerification.ps1",
+            "tools/oss-workflow/New-EvidenceReport.ps1",
+            "tools/oss-workflow/New-Lr14RegistrationCandidate.ps1",
+            "tools/oss-workflow/OssWorkflow.psm1",
+            "tools/oss-workflow/README.md",
+            "tools/oss-workflow/Test-CommitIdentityPrivacy.ps1",
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1")
+        Markers   = @{
+            "tools/oss-workflow/approved-identities.json" = "oss-workflow.approved-identities/v1"
+            "tools/oss-workflow/Invoke-TieredVerification.ps1" = "Tiered local verification (L1-L4) with machine-readable receipts."
+            "tools/oss-workflow/New-EvidenceReport.ps1" = "Builds a concise acceptance-evidence report (Markdown) from real Git state,"
+            "tools/oss-workflow/New-Lr14RegistrationCandidate.ps1" = "Produces a CANDIDATE LR-14 slice registration for human review."
+            "tools/oss-workflow/OssWorkflow.psm1" = "function Test-OwRegistrationOnlyChange"
+            "tools/oss-workflow/README.md" = "# OSS workflow tools"
+            "tools/oss-workflow/Test-CommitIdentityPrivacy.ps1" = "Read-only pre-push privacy gate for commit identities."
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "OSS workflow tools validation PASSED"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
