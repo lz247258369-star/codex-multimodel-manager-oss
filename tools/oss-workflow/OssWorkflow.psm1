@@ -222,10 +222,63 @@ function Get-OwMaxLevel([string[]]$Levels) {
     return $max
 }
 
+# Expression of a single-element pipeline statement, or $null.
+function Get-OwSingleExpression([object]$Statement) {
+    if ($Statement -isnot [System.Management.Automation.Language.PipelineAst]) { return $null }
+    if ($Statement.PipelineElements.Count -ne 1) { return $null }
+    $element = $Statement.PipelineElements[0]
+    if ($element -isnot [System.Management.Automation.Language.CommandExpressionAst] -or $element.Redirections.Count -gt 0) { return $null }
+    return $element.Expression
+}
+
+function Test-OwPlainString([object]$Expression) {
+    return ($Expression -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+        $Expression.StringConstantType -in @('SingleQuoted', 'DoubleQuoted') -and -not [string]::IsNullOrEmpty($Expression.Value))
+}
+
+# True only for a pure-data registration entry:
+#   [pscustomobject]@{ Name = "..."; Base = "<40 hex>"; Tip = "<40 hex>";
+#                      Artifacts = @("...", ...); Markers = @{ "..." = "..." } }
+# with exactly these keys, quoted string constants only (no variables, sub
+# expressions, commands, method calls or expandable strings) and every marker
+# file listed in Artifacts.
+function Test-OwStaticRegistrationStatement([object]$Statement) {
+    $e = Get-OwSingleExpression $Statement
+    if ($e -isnot [System.Management.Automation.Language.ConvertExpressionAst]) { return $false }
+    if ($e.Type.TypeName.FullName -ine 'pscustomobject' -or $e.Child -isnot [System.Management.Automation.Language.HashtableAst]) { return $false }
+    $values = @{}
+    foreach ($pair in $e.Child.KeyValuePairs) {
+        $key = $pair.Item1
+        if ($key -isnot [System.Management.Automation.Language.StringConstantExpressionAst]) { return $false }
+        if ($values.ContainsKey($key.Value)) { return $false }
+        $values[$key.Value] = Get-OwSingleExpression $pair.Item2
+    }
+    if ((@($values.Keys | Sort-Object) -join ',') -cne 'Artifacts,Base,Markers,Name,Tip') { return $false }
+    if (-not (Test-OwPlainString $values['Name'])) { return $false }
+    foreach ($k in @('Base', 'Tip')) { if (-not (Test-OwPlainString $values[$k]) -or $values[$k].Value -cnotmatch '^[0-9a-f]{40}$') { return $false } }
+    $artifacts = $values['Artifacts']
+    if ($artifacts -isnot [System.Management.Automation.Language.ArrayExpressionAst]) { return $false }
+    $paths = [System.Collections.Generic.List[string]]::new()
+    foreach ($s in $artifacts.SubExpression.Statements) {
+        $x = Get-OwSingleExpression $s
+        $items = if ($x -is [System.Management.Automation.Language.ArrayLiteralAst]) { @($x.Elements) } else { @($x) }
+        foreach ($item in $items) { if (-not (Test-OwPlainString $item)) { return $false }; $paths.Add($item.Value) }
+    }
+    if ($paths.Count -eq 0) { return $false }
+    $markers = $values['Markers']
+    if ($markers -isnot [System.Management.Automation.Language.HashtableAst] -or $markers.KeyValuePairs.Count -eq 0) { return $false }
+    foreach ($pair in $markers.KeyValuePairs) {
+        if (-not (Test-OwPlainString $pair.Item1) -or $paths -cnotcontains $pair.Item1.Value) { return $false }
+        if (-not (Test-OwPlainString (Get-OwSingleExpression $pair.Item2))) { return $false }
+    }
+    return $true
+}
+
 # True only when the LR-14 gate file differs from its merge-base version by a
-# single contiguous insertion of new entries at the end of RegisteredSlices,
-# with every existing entry and all other text unchanged. Anything else is a
-# change to the gate itself.
+# single contiguous insertion inside RegisteredSlices that consists solely of
+# new, whole, pure-data registration entries (plus comments and whitespace),
+# with every existing statement and all other text byte-identical. Anything
+# else is a change to the gate itself.
 function Test-OwRegistrationOnlyChange([string]$Root, [string]$MergeBase) {
     $rel = 'tests/validate-local-router-lr14-scope.ps1'
     $path = Join-Path $Root $rel
@@ -241,21 +294,39 @@ function Test-OwRegistrationOnlyChange([string]$Root, [string]$MergeBase) {
     $pre = 0; while ($pre -lt $oldText.Length -and $oldText[$pre] -ceq $newText[$pre]) { $pre++ }
     $tail = $oldText.Substring($pre)
     if (-not $newText.EndsWith($tail, [StringComparison]::Ordinal)) { return $false }   # something was removed or replaced
-    $suf = $tail.Length
+    $insertStart = $pre
+    $insertEnd = $newText.Length - $tail.Length
     $find = {
         param([string]$Text)
-        $ast = [System.Management.Automation.Language.Parser]::ParseInput($Text, [ref]$null, [ref]$null)
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($Text, [ref]$null, [ref]$errors)
+        if ($errors.Count -gt 0) { return $null }
         $a = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -ceq '$script:RegisteredSlices' }, $true)
         if (-not $a) { return $null }
         $arr = $a.Right.Find({ param($n) $n -is [System.Management.Automation.Language.ArrayExpressionAst] }, $true)
-        $entries = @($arr.FindAll({ param($n) $n -is [System.Management.Automation.Language.HashtableAst] -and $n.Parent -is [System.Management.Automation.Language.ConvertExpressionAst] }, $true) | ForEach-Object { $_.Parent.Extent.Text })
-        return [pscustomobject]@{ Start = $arr.Extent.StartOffset; End = $arr.Extent.EndOffset; Entries = $entries }
+        if (-not $arr) { return $null }
+        return [pscustomobject]@{ Start = $arr.Extent.StartOffset; End = $arr.Extent.EndOffset; Statements = @($arr.SubExpression.Statements) }
     }
     $o = & $find $oldText; $n = & $find $newText
     if (-not $o -or -not $n) { return $false }
-    if ($pre -lt $n.Start -or ($newText.Length - $suf) -gt $n.End) { return $false }   # insertion outside the array
-    if ($n.Entries.Count -le $o.Entries.Count) { return $false }
-    for ($i = 0; $i -lt $o.Entries.Count; $i++) { if ($n.Entries[$i] -cne $o.Entries[$i]) { return $false } }
+    if ($insertStart -le $n.Start -or $insertEnd -ge $n.End) { return $false }   # insertion outside the array body
+    $old = [System.Collections.Generic.List[object]]::new(); $added = [System.Collections.Generic.List[object]]::new()
+    foreach ($s in $n.Statements) {
+        $sStart = $s.Extent.StartOffset; $sEnd = $s.Extent.EndOffset
+        if ($sStart -ge $insertStart -and $sEnd -le $insertEnd) { $added.Add($s) }
+        elseif ($sEnd -le $insertStart -or $sStart -ge $insertEnd) { $old.Add($s) }
+        else { return $false }   # the insertion reaches into an existing statement
+    }
+    if ($added.Count -eq 0 -or $old.Count -ne $o.Statements.Count) { return $false }
+    for ($i = 0; $i -lt $old.Count; $i++) { if ($old[$i].Extent.Text -cne $o.Statements[$i].Extent.Text) { return $false } }
+    foreach ($s in $added) { if (-not (Test-OwStaticRegistrationStatement $s)) { return $false } }
+    # Outside the new entries, the inserted text may contain only comments and whitespace.
+    $rest = [System.Text.StringBuilder]::new($newText.Substring($insertStart, $insertEnd - $insertStart))
+    foreach ($s in $added) { for ($k = $s.Extent.StartOffset; $k -lt $s.Extent.EndOffset; $k++) { $rest[$k - $insertStart] = ' ' } }
+    $tokens = $null; $errs = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseInput($rest.ToString(), [ref]$tokens, [ref]$errs)
+    if ($errs.Count -gt 0) { return $false }
+    foreach ($t in $tokens) { if ($t.Kind -notin @('Comment', 'NewLine', 'EndOfInput')) { return $false } }
     return $true
 }
 
@@ -263,9 +334,33 @@ function Test-OwRegistrationOnlyChange([string]$Root, [string]$MergeBase) {
 # -MergeBase, a proven append-only LR-14 registration is classified as such.
 function Get-OwVerificationPlan([string[]]$Paths, [string]$Root, [string]$MergeBase) {
     $files = @($Paths | Where-Object { $_ } | Sort-Object -Unique | ForEach-Object { Get-OwFileClassification $_ })
+    $uncovered = [System.Collections.Generic.List[string]]::new()
     if ($Root -and $MergeBase) {
         foreach ($f in $files | Where-Object { $_.path -ceq 'tests/validate-local-router-lr14-scope.ps1' }) {
             if (Test-OwRegistrationOnlyChange $Root $MergeBase) { $f.rule = 'lr14-registration-append'; $f.level = 'L2'; $f.module = 'lr14-registration' }
+        }
+    }
+    if ($Root) {
+        # An L2 file must have real tests that cover it; otherwise it is L3.
+        $known = $null
+        try { $known = @(Get-OwProjectNames $Root) } catch { $known = $null }
+        foreach ($f in $files | Where-Object { $_.level -eq 'L2' }) {
+            $why = $null
+            switch ($f.rule) {
+                'router-project' {
+                    if ($null -eq $known) { $why = 'the .NET project graph could not be read' }
+                    elseif ($known -cnotcontains $f.project) { $why = "project $($f.project) is not in the .NET project graph" }
+                    else {
+                        try { if (@(Get-OwAffectedTestProjects $Root @($f.project)).Count -eq 0) { $why = "no test project covers $($f.project)" } }
+                        catch { $why = 'test-project dependencies could not be resolved' }
+                    }
+                }
+                'validator' { if (-not (Test-Path -LiteralPath (Join-Path $Root $f.path) -PathType Leaf)) { $why = 'the validator itself was removed' } }
+                'test-fixtures' { if (@(Select-OwValidators $Root @($f)).Count -eq 0) { $why = 'no validator references this fixture' } }
+                'workflow-tools' { if (-not (Test-Path -LiteralPath (Join-Path $Root 'tools/oss-workflow/tests/Test-OssWorkflowTools.ps1') -PathType Leaf)) { $why = 'the workflow-tool tests are missing' } }
+                'lr14-registration-append' { if (-not (Test-Path -LiteralPath (Join-Path $Root 'tests/validate-local-router-lr14-scope-regression.ps1') -PathType Leaf)) { $why = 'the LR-14 regression is missing' } }
+            }
+            if ($why) { $f.level = 'L3'; $f.rule = "$($f.rule)+uncovered"; $uncovered.Add("$($f.path): $why") }
         }
     }
     $reasons = [System.Collections.Generic.List[string]]::new()
@@ -278,6 +373,7 @@ function Get-OwVerificationPlan([string[]]$Paths, [string]$Root, [string]$MergeB
         $reasons.Add(("{0} -> {1} ({2})" -f $f.path, $f.level, $f.rule))
     }
     if (@($files | Where-Object { $_.rule -eq 'unknown' }).Count -gt 0) { $reasons.Add('unknown change scope defaults to L3') }
+    foreach ($u in $uncovered) { $reasons.Add("no matching test, upgraded to L3: $u") }
     # Documentation and the slice's own LR-14 registration never count as a second module.
     $modules = @($files | Where-Object { $_.module -notin @('docs', 'lr14-registration') } | ForEach-Object { $_.module } | Sort-Object -Unique)
     if ($modules.Count -gt 1 -and (Get-OwLevelIndex $level) -lt (Get-OwLevelIndex 'L3')) {
@@ -291,6 +387,12 @@ function Get-OwVerificationPlan([string[]]$Paths, [string]$Root, [string]$MergeB
 # ---------------------------------------------------------------------------
 # .NET project graph: test projects that (transitively) reference a project.
 # ---------------------------------------------------------------------------
+function Get-OwProjectNames([string]$Root) {
+    $routerRoot = Join-Path $Root 'local-router'
+    if (-not (Test-Path -LiteralPath $routerRoot)) { return @() }
+    return @(Get-ChildItem -LiteralPath $routerRoot -Recurse -Filter '*.csproj' -File | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' } | ForEach-Object { [System.IO.Path]::GetFileNameWithoutExtension($_.Name) })
+}
+
 function Get-OwAffectedTestProjects([string]$Root, [string[]]$Projects) {
     $routerRoot = Join-Path $Root 'local-router'
     if (-not (Test-Path -LiteralPath $routerRoot)) { return @() }
@@ -323,6 +425,7 @@ function Select-OwValidators([string]$Root, [object[]]$Files) {
         $null = $needles.Add($f.path)
         if ($f.project) { $null = $needles.Add($f.project) }
         if ($f.path -match '\.(ps1|psm1|cmd)$') { $null = $needles.Add([System.IO.Path]::GetFileName($f.path)) }
+        if ($f.path -match '^tests/fixtures/(.+)/[^/]+$') { $null = $needles.Add("tests/fixtures/$($Matches[1])") }
         if ($f.path -match '^tests/validate-[^/]+\.ps1$' -and (Test-Path -LiteralPath (Join-Path $Root $f.path))) { $null = $selected.Add($f.path) }
     }
     if ($needles.Count -gt 0) {
@@ -351,16 +454,40 @@ function Get-OwEnvironment([string]$Root) {
         finally { Pop-Location }
     }
     $gitVersion = ((Invoke-OwGit -Root $Root -Arguments @('--version')).Lines -join '') -replace '^git version\s*', ''
+    # Identity verdicts (labels only, never values) for the local Git identity
+    # and any GIT_AUTHOR_* / GIT_COMMITTER_* overrides.
+    $policy = $null
+    try { $policy = Get-OwApprovedIdentities } catch { $policy = $null }
+    $identity = 'policy-unavailable'; $overrides = 'policy-unavailable'
+    if ($policy) {
+        $n = @((Invoke-OwGit -Root $Root -Arguments @('config', '--get', 'user.name') -AllowFailure).Lines)
+        $m = @((Invoke-OwGit -Root $Root -Arguments @('config', '--get', 'user.email') -AllowFailure).Lines)
+        $identity = if ($n.Count -eq 0 -or $m.Count -eq 0) { 'unset' } else { $l = Find-OwIdentity @($policy.local_config) $n[0] $m[0]; if ($l) { $l } else { 'not-approved' } }
+        $parts = foreach ($pair in @(@('GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'author'), @('GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL', 'committer'))) {
+            $vn = [Environment]::GetEnvironmentVariable($pair[0]); $ve = [Environment]::GetEnvironmentVariable($pair[1])
+            if ($vn -or $ve) { $l = Find-OwIdentity @($policy.local_config) ([string]$vn) ([string]$ve); "$($pair[2])=$(if ($l) { $l } else { 'not-approved' })" }
+        }
+        $overrides = if (@($parts).Count -eq 0) { 'none' } else { @($parts) -join ';' }
+    }
+    # Build-affecting variables and executables, recorded as hashes only.
+    $buildVars = @(Get-ChildItem Env: | Where-Object { $_.Name -match '^(DOTNET_|NUGET_|MSBUILD|MSBuild|VSTEST|NODE_REUSE|COMPlus_)' } | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" })
+    $reliable = ($sdk -match '^\d+\.\d+\.\d+' -and $gitVersion -match '\d' -and $null -ne $policy)
     return [ordered]@{
         os = [System.Environment]::OSVersion.VersionString
         pwsh = $PSVersionTable.PSVersion.ToString()
+        pwsh_path_sha256 = Get-OwSha256Text ((Get-Process -Id $PID).Path)
         git = $gitVersion
         dotnet_sdk_at_repository_root = $sdk
         dotnet_sdks_installed = $sdks
+        dotnet_path_sha256 = if ($dotnet) { Get-OwSha256Text $dotnet.Source } else { 'unavailable' }
+        build_environment_sha256 = Get-OwSha256Text ($buildVars -join "`n")
+        identity_local_config = $identity
+        identity_environment_overrides = $overrides
         runner = if ($env:GITHUB_ACTIONS -eq 'true') { 'github-actions' } else { 'local' }
         image_os = [string]$env:ImageOS
         image_version = [string]$env:ImageVersion
         machine_sha256 = Get-OwSha256Text ([System.Environment]::MachineName)
+        reliable = $reliable
     }
 }
 
@@ -554,33 +681,40 @@ function Get-OwWorkflowSteps([string]$Root) {
     return @($steps)
 }
 
+# Sets a process environment variable, or removes it when the value is $null
+# (restoring "never set" must not leave an empty variable behind).
+function Set-OwEnvironmentVariable([string]$Name, [object]$Value) {
+    if ($null -eq $Value) { Remove-Item -LiteralPath "Env:$Name" -ErrorAction SilentlyContinue }
+    else { [Environment]::SetEnvironmentVariable($Name, [string]$Value) }
+}
+
 # Runs a PowerShell script in a child pwsh with the repository root as the
 # working directory and optional extra environment variables.
 function Invoke-OwPwshFile([string]$Root, [string]$File, [string[]]$Arguments = @(), [hashtable]$Environment = @{}) {
     $pwsh = (Get-Process -Id $PID).Path
     $saved = @{}
-    foreach ($k in $Environment.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, [string]$Environment[$k]) }
+    foreach ($k in $Environment.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); Set-OwEnvironmentVariable $k $Environment[$k] }
     Push-Location -LiteralPath $Root
     $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try { $out = @(& $pwsh -NoLogo -NoProfile -File $File @Arguments 2>&1 | ForEach-Object { [string]$_ }); $code = $LASTEXITCODE }
     finally {
         $ErrorActionPreference = $previous
         Pop-Location
-        foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) }
+        foreach ($k in $saved.Keys) { Set-OwEnvironmentVariable $k $saved[$k] }
     }
     return [pscustomobject]@{ Code = $code; Lines = $out }
 }
 
 function Invoke-OwNative([string]$Root, [string]$Command, [string[]]$Arguments, [hashtable]$Environment = @{}) {
     $saved = @{}
-    foreach ($k in $Environment.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, [string]$Environment[$k]) }
+    foreach ($k in $Environment.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); Set-OwEnvironmentVariable $k $Environment[$k] }
     Push-Location -LiteralPath $Root
     $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try { $out = @(& $Command @Arguments 2>&1 | ForEach-Object { [string]$_ }); $code = $LASTEXITCODE }
     finally {
         $ErrorActionPreference = $previous
         Pop-Location
-        foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) }
+        foreach ($k in $saved.Keys) { Set-OwEnvironmentVariable $k $saved[$k] }
     }
     return [pscustomobject]@{ Code = $code; Lines = $out }
 }

@@ -52,6 +52,60 @@ function New-Check([string]$Id, [string]$Kind, [string]$Command, [scriptblock]$A
     return [ordered]@{ id = $Id; kind = $Kind; command = $Command; condition = $Condition; action = $Action }
 }
 
+function New-ValidatorCheck([string]$Root, [string]$Script, [string]$Prefix) {
+    return (New-Check "${Prefix}:validator:$([IO.Path]::GetFileNameWithoutExtension($Script))" 'validator' "pwsh -File $Script -RepositoryRoot <repo>" {
+            if (-not (Test-Path -LiteralPath (Join-Path $Root $Script) -PathType Leaf)) { return [ordered]@{ status = 'BLOCKED'; exit_code = $null; summary = 'validator file is missing'; failures = @() } }
+            $r = Invoke-OwPwshFile $Root (Join-Path $Root $Script) @('-RepositoryRoot', $Root)
+            $p = @($r.Lines | Where-Object { $_ -match '^\s*PASS\s' }).Count; $f = @($r.Lines | Where-Object { $_ -match '^\s*FAIL\s' }).Count
+            [ordered]@{ status = $(if ($r.Code -eq 0) { 'PASS' } else { 'FAIL' }); exit_code = $r.Code; summary = "PASS lines=$p FAIL lines=$f"; failures = @(Get-Tail $r.Lines $Root) }
+        }.GetNewClosure())
+}
+
+function New-ToolTestsCheck([string]$Root, [string]$Prefix) {
+    return (New-Check "${Prefix}:workflow-tools-tests" 'validator' 'pwsh -File tools/oss-workflow/tests/Test-OssWorkflowTools.ps1 -RepositoryRoot <repo>' {
+            $t = Join-Path $Root 'tools/oss-workflow/tests/Test-OssWorkflowTools.ps1'
+            if (-not (Test-Path -LiteralPath $t -PathType Leaf)) { return [ordered]@{ status = 'BLOCKED'; exit_code = $null; summary = 'tool tests are missing'; failures = @() } }
+            $r = Invoke-OwPwshFile $Root $t @('-RepositoryRoot', $Root)
+            $sum = @($r.Lines | Where-Object { $_ -match '^OSS_WORKFLOW_TOOLS_SUMMARY' } | Select-Object -Last 1)
+            [ordered]@{ status = $(if ($r.Code -eq 0) { 'PASS' } else { 'FAIL' }); exit_code = $r.Code; summary = $(if ($sum) { $sum[0] } else { 'no summary' }); failures = @(Get-Tail $r.Lines $Root) }
+        }.GetNewClosure())
+}
+
+function New-IdentityCheck([string]$Root, [string]$MergeBase, [string]$Head, [object]$Policy) {
+    return (New-Check 'l1:identity-privacy' 'privacy' "identity privacy $($MergeBase.Substring(0, 12))..HEAD + local config" {
+            $res = @(Test-OwIdentityPrivacy $Root $MergeBase $Head $Policy)
+            $bad = @($res | Where-Object { -not $_.ok })
+            [ordered]@{ status = $(if ($bad.Count -eq 0) { 'PASS' } else { 'FAIL' }); exit_code = $bad.Count; summary = "$($res.Count) identity check(s), $($bad.Count) not approved (values withheld)"; failures = @($bad | Select-Object -First 3 | ForEach-Object { "$($_.commit) $($_.field) $($_.label)" }) }
+        }.GetNewClosure())
+}
+
+function Invoke-Check([object]$Check, [string]$Root) {
+    $t0 = [DateTime]::UtcNow
+    try { $res = & $Check.action }
+    catch { $res = [ordered]@{ status = 'BLOCKED'; exit_code = $null; summary = (ConvertTo-OwSafeText ("check could not run: " + $_.Exception.Message) $Root); failures = @() } }
+    return [ordered]@{
+        id = $Check.id; kind = $Check.kind; command = $Check.command; condition = $Check.condition
+        status = [string]$res.status; exit_code = $res.exit_code
+        started_at = $t0.ToString('o'); duration_seconds = [math]::Round(([DateTime]::UtcNow - $t0).TotalSeconds, 2)
+        summary = [string]$res.summary; failures = @($res.failures | ForEach-Object { ConvertTo-OwSafeText ([string]$_) $Root })
+    }
+}
+
+# State that a receipt vouches for; compared at the start and the end of a run.
+function Get-StateSnapshot([string]$Root) {
+    $h = (Invoke-OwGit -Root $Root -Arguments @('rev-parse', 'HEAD')).Lines[0]
+    return [ordered]@{ head = $h; tree = (Get-OwTree $Root $h); worktree = (Get-OwWorktreeState $Root); environment = (Get-OwEnvironment $Root) }
+}
+
+function Get-StateDrift([System.Collections.IDictionary]$Before, [System.Collections.IDictionary]$After) {
+    $d = [System.Collections.Generic.List[string]]::new()
+    if ($Before.head -cne $After.head) { $d.Add('HEAD changed') }
+    if ($Before.tree -cne $After.tree) { $d.Add('tree changed') }
+    if ([string]$Before.worktree.fingerprint -cne [string]$After.worktree.fingerprint -or [bool]$Before.worktree.clean -ne [bool]$After.worktree.clean) { $d.Add('working tree changed') }
+    foreach ($k in $Before.environment.Keys) { if ([string]$Before.environment[$k] -cne [string]$After.environment[$k]) { $d.Add("environment changed: $k") } }
+    return @($d)
+}
+
 try {
     $root = Get-OwRepositoryRoot $RepositoryRoot
     $head = Resolve-OwCommit $root 'HEAD' 'HEAD'
@@ -110,11 +164,9 @@ $checks.Add((New-Check 'l1:json-parse' 'static' "parse $($jsonChanged.Count) cha
             foreach ($p in $jsonChanged) { try { $null = Get-Content -Raw -LiteralPath (Join-Path $root $p) | ConvertFrom-Json } catch { $bad.Add($p) } }
             [ordered]@{ status = $(if ($bad.Count -eq 0) { 'PASS' } else { 'FAIL' }); exit_code = $bad.Count; summary = "$($jsonChanged.Count) file(s), $($bad.Count) invalid"; failures = @($bad | Select-Object -First 3) }
         }))
-$checks.Add((New-Check 'l1:identity-privacy' 'privacy' "identity privacy $($mergeBase.Substring(0, 12))..HEAD + local config" {
-            $res = @(Test-OwIdentityPrivacy $root $mergeBase $head $policy)
-            $bad = @($res | Where-Object { -not $_.ok })
-            [ordered]@{ status = $(if ($bad.Count -eq 0) { 'PASS' } else { 'FAIL' }); exit_code = $bad.Count; summary = "$($res.Count) identity check(s), $($bad.Count) not approved (values withheld)"; failures = @($bad | Select-Object -First 3 | ForEach-Object { "$($_.commit) $($_.field) $($_.label)" }) }
-        }))
+$checks.Add((New-IdentityCheck $root $mergeBase $head $policy))
+$selectedValidators = @(Select-OwValidators $root $plan.files)
+$toolsChanged = (@($plan.files | Where-Object { $_.module -eq 'workflow-tools' }).Count -gt 0)
 
 if ($executed -eq 'L2') {
     $projects = @($plan.files | Where-Object { $_.project } | ForEach-Object { $_.project } | Sort-Object -Unique)
@@ -138,24 +190,8 @@ if ($executed -eq 'L2') {
                     }.GetNewClosure()))
         }
     }
-    foreach ($v in @(Select-OwValidators $root $plan.files)) {
-        $script = $v
-        $checks.Add((New-Check "l2:validator:$([IO.Path]::GetFileNameWithoutExtension($script))" 'validator' "pwsh -File $script -RepositoryRoot <repo>" {
-                    if (-not (Test-Path -LiteralPath (Join-Path $root $script) -PathType Leaf)) { return [ordered]@{ status = 'BLOCKED'; exit_code = $null; summary = 'validator file is missing'; failures = @() } }
-                    $r = Invoke-OwPwshFile $root (Join-Path $root $script) @('-RepositoryRoot', $root)
-                    $p = @($r.Lines | Where-Object { $_ -match '^\s*PASS\s' }).Count; $f = @($r.Lines | Where-Object { $_ -match '^\s*FAIL\s' }).Count
-                    [ordered]@{ status = $(if ($r.Code -eq 0) { 'PASS' } else { 'FAIL' }); exit_code = $r.Code; summary = "PASS lines=$p FAIL lines=$f"; failures = @(Get-Tail $r.Lines $root) }
-                }.GetNewClosure()))
-    }
-    if (@($plan.files | Where-Object { $_.module -eq 'workflow-tools' }).Count -gt 0) {
-        $checks.Add((New-Check 'l2:workflow-tools-tests' 'validator' 'pwsh -File tools/oss-workflow/tests/Test-OssWorkflowTools.ps1 -RepositoryRoot <repo>' {
-                    $t = Join-Path $root 'tools/oss-workflow/tests/Test-OssWorkflowTools.ps1'
-                    if (-not (Test-Path -LiteralPath $t -PathType Leaf)) { return [ordered]@{ status = 'BLOCKED'; exit_code = $null; summary = 'tool tests are missing'; failures = @() } }
-                    $r = Invoke-OwPwshFile $root $t @('-RepositoryRoot', $root)
-                    $sum = @($r.Lines | Where-Object { $_ -match '^OSS_WORKFLOW_TOOLS_SUMMARY' } | Select-Object -Last 1)
-                    [ordered]@{ status = $(if ($r.Code -eq 0) { 'PASS' } else { 'FAIL' }); exit_code = $r.Code; summary = $(if ($sum) { $sum[0] } else { 'no summary' }); failures = @(Get-Tail $r.Lines $root) }
-                }))
-    }
+    foreach ($v in $selectedValidators) { $checks.Add((New-ValidatorCheck $root $v 'l2')) }
+    if ($toolsChanged) { $checks.Add((New-ToolTestsCheck $root 'l2')) }
     if (@($plan.files | Where-Object { $_.module -eq 'lr14-registration' }).Count -gt 0) {
         $checks.Add((New-Check 'l2:lr14-scope-regression' 'gate' 'pwsh -File tests/validate-local-router-lr14-scope-regression.ps1 -RepositoryRoot <repo>' {
                     $g = Join-Path $root 'tests/validate-local-router-lr14-scope-regression.ps1'
@@ -199,6 +235,11 @@ if ($executed -in @('L3', 'L4')) {
                 }.GetNewClosure() $step.condition))
     }
     $notExecuted.Add([ordered]@{ item = 'GitHub step conditions'; reason = 'local runs execute every step even after a failure; GitHub skips later steps after a failure' })
+    # A higher level never runs less than L2 would: tests that ci.yml does not
+    # run (the workflow-tool tests, validators missing from ci.yml) are added.
+    $ciRuns = (@($steps | Where-Object { $_.run } | ForEach-Object { $_.run }) -join "`n")
+    if ($toolsChanged -and -not $ciRuns.Contains('tools/oss-workflow/tests/Test-OssWorkflowTools.ps1')) { $checks.Add((New-ToolTestsCheck $root 'l3')) }
+    foreach ($v in $selectedValidators) { if (-not $ciRuns.Contains($v)) { $checks.Add((New-ValidatorCheck $root $v 'l3')) } }
 }
 foreach ($l in $script:OwLevels | Where-Object { (Get-OwLevelIndex $_) -gt (Get-OwLevelIndex $executed) }) {
     $notExecuted.Add([ordered]@{ item = "level $l"; reason = 'not executed in this run' })
@@ -255,7 +296,32 @@ if ($blockedReason) {
     exit 3
 }
 
-if ($ReuseReceipt -and (Test-Path -LiteralPath $receiptDir)) {
+$startState = [ordered]@{ head = $head; tree = $tree; worktree = $worktree; environment = $environment }
+$identityCheck = @($checks | Where-Object { $_.id -eq 'l1:identity-privacy' })[0]
+
+function Complete-Receipt([System.Collections.Generic.List[object]]$Results) {
+    # A receipt may vouch only for a state that did not change while it was produced.
+    $drift = @(Get-StateDrift $startState (Get-StateSnapshot $root))
+    $message = $null
+    if ($drift.Count -gt 0) {
+        $Results.Add([ordered]@{ id = 'integrity:state-stable'; kind = 'integrity'; command = 'compare state at start and end'; condition = $null; status = 'BLOCKED'; exit_code = $null
+                started_at = [DateTime]::UtcNow.ToString('o'); duration_seconds = 0; summary = ('state changed during verification: ' + ($drift -join ', ')); failures = @() })
+        $message = "BLOCKED  integrity:state-stable :: state changed during verification: $($drift -join ', ')"
+    }
+    $counts = @{ PASS = 0; FAIL = 0; SKIP = 0; BLOCKED = 0 }
+    foreach ($r in $Results) { $counts[$r.status]++ }
+    $status = if ($counts.FAIL -gt 0) { 'FAIL' } elseif ($counts.BLOCKED -gt 0) { 'BLOCKED' } elseif ($counts.SKIP -gt 0 -or $Results.Count -eq 0) { 'INCOMPLETE' } else { 'PASS' }
+    $receipt.checks = @($Results)
+    $receipt.status = $status
+    $receipt.finished_at = [DateTime]::UtcNow.ToString('o')
+    $receipt.duration_seconds = [math]::Round(([DateTime]::UtcNow - $started).TotalSeconds, 2)
+    return [pscustomobject]@{ Status = $status; Counts = $counts; Path = (Write-OwReceipt $receipt $receiptDir); Message = $message }
+}
+
+if ($ReuseReceipt -and -not $environment.reliable) {
+    Write-Output 'reuse: refused, the environment could not be determined reliably (SDK, Git or identity policy unavailable); verifying instead'
+}
+elseif ($ReuseReceipt -and (Test-Path -LiteralPath $receiptDir)) {
     $current = [ordered]@{ commit_sha = $head; tree_sha = $tree; merge_base_sha = $mergeBase; worktree = $worktree; environment = $environment; tool = $tool }
     $candidates = @(Get-ChildItem -LiteralPath $receiptDir -Filter '*.json' -File | Sort-Object Name -Descending)
     $rejected = 0
@@ -263,41 +329,33 @@ if ($ReuseReceipt -and (Test-Path -LiteralPath $receiptDir)) {
         $rr = Read-OwReceipt $c.FullName
         if (-not $rr.Intact) { $rejected++; continue }
         $old = $rr.Receipt
-        if ($old.receipt_key -cne $receiptKey -or $old.status -cne 'PASS' -or $null -ne $old.reused_from) { $rejected++; continue }
+        if ($old.receipt_key -cne $receiptKey -or $old.status -cne 'PASS' -or $null -ne $old.reused_from -or $old.environment.reliable -ne $true) { $rejected++; continue }
         if (@(Get-OwReceiptStaleReasons $old $current).Count -gt 0) { $rejected++; continue }
-        $receipt.status = 'PASS'
+        # Identity privacy is always re-checked live; it is never taken from an old receipt.
+        $results = [System.Collections.Generic.List[object]]::new()
+        $live = Invoke-Check $identityCheck $root
+        $live['reused'] = $false
+        $results.Add($live)
+        foreach ($oc in $old.checks | Where-Object { $_.id -ne 'l1:identity-privacy' }) { $h = [ordered]@{}; foreach ($p in $oc.PSObject.Properties) { $h[$p.Name] = $p.Value }; $h['reused'] = $true; $results.Add($h) }
         $receipt.reused_from = [ordered]@{ file = $c.Name; receipt_sha256 = $old.receipt_sha256 }
-        $receipt.checks = @($old.checks | ForEach-Object { $h = [ordered]@{}; foreach ($p in $_.PSObject.Properties) { $h[$p.Name] = $p.Value }; $h['reused'] = $true; $h })
-        $receipt.finished_at = [DateTime]::UtcNow.ToString('o'); $receipt.duration_seconds = [math]::Round(([DateTime]::UtcNow - $started).TotalSeconds, 2)
-        $path = Write-OwReceipt $receipt $receiptDir
-        Write-Output "REUSED  $($c.Name) (identical key; $($receipt.checks.Count) check(s) not re-run)"
-        Write-Output ("OSS_VERIFY level={0} required={1} status=PASS reused=true checks={2} seconds={3} scope={4} receipt={5}" -f $executed, $required, $receipt.checks.Count, $receipt.duration_seconds, $scope, (ConvertTo-OwSafeText $path $root))
-        exit 0
+        $done = Complete-Receipt $results
+        if ($done.Message) { Write-Output $done.Message }
+        Write-Output ("{0,-8} l1:identity-privacy (live) {1}" -f $live.status, $live.summary)
+        Write-Output "REUSED  $($c.Name) for $($results.Count - 1) check(s); identity privacy re-checked live"
+        Write-Output ("OSS_VERIFY level={0} required={1} status={2} reused=true checks={3} seconds={4} scope={5} receipt={6}" -f $executed, $required, $done.Status, $results.Count, $receipt.duration_seconds, $scope, (ConvertTo-OwSafeText $done.Path $root))
+        exit $(switch ($done.Status) { 'PASS' { 0 } 'FAIL' { 1 } default { 3 } })
     }
-    Write-Output "reuse: no matching PASS receipt ($rejected receipt(s) rejected: different key, not PASS, stale or altered)"
+    Write-Output "reuse: no matching PASS receipt ($rejected receipt(s) rejected: different key, not PASS, stale, altered or from an unreliable environment)"
 }
 
 $results = [System.Collections.Generic.List[object]]::new()
 foreach ($c in $checks) {
-    $t0 = [DateTime]::UtcNow
-    try { $res = & $c.action }
-    catch { $res = [ordered]@{ status = 'BLOCKED'; exit_code = $null; summary = (ConvertTo-OwSafeText ("check could not run: " + $_.Exception.Message) $root); failures = @() } }
-    $entry = [ordered]@{
-        id = $c.id; kind = $c.kind; command = $c.command; condition = $c.condition
-        status = [string]$res.status; exit_code = $res.exit_code
-        started_at = $t0.ToString('o'); duration_seconds = [math]::Round(([DateTime]::UtcNow - $t0).TotalSeconds, 2)
-        summary = [string]$res.summary; failures = @($res.failures | ForEach-Object { ConvertTo-OwSafeText ([string]$_) $root })
-    }
+    $entry = Invoke-Check $c $root
     $results.Add($entry)
     Write-Output ("{0,-8} {1} ({2}s) {3}" -f $entry.status, $entry.id, $entry.duration_seconds, $entry.summary)
 }
-$counts = @{ PASS = 0; FAIL = 0; SKIP = 0; BLOCKED = 0 }
-foreach ($r in $results) { $counts[$r.status]++ }
-$status = if ($counts.FAIL -gt 0) { 'FAIL' } elseif ($counts.BLOCKED -gt 0) { 'BLOCKED' } elseif ($counts.SKIP -gt 0 -or $results.Count -eq 0) { 'INCOMPLETE' } else { 'PASS' }
-$receipt.checks = @($results)
-$receipt.status = $status
-$receipt.finished_at = [DateTime]::UtcNow.ToString('o')
-$receipt.duration_seconds = [math]::Round(([DateTime]::UtcNow - $started).TotalSeconds, 2)
-$path = Write-OwReceipt $receipt $receiptDir
-Write-Output ("OSS_VERIFY level={0} required={1} status={2} checks={3} pass={4} fail={5} skip={6} blocked={7} seconds={8} scope={9} receipt={10}" -f $executed, $required, $status, $results.Count, $counts.PASS, $counts.FAIL, $counts.SKIP, $counts.BLOCKED, $receipt.duration_seconds, $scope, (ConvertTo-OwSafeText $path $root))
-exit $(switch ($status) { 'PASS' { 0 } 'FAIL' { 1 } default { 3 } })
+$done = Complete-Receipt $results
+if ($done.Message) { Write-Output $done.Message }
+$counts = $done.Counts
+Write-Output ("OSS_VERIFY level={0} required={1} status={2} checks={3} pass={4} fail={5} skip={6} blocked={7} seconds={8} scope={9} receipt={10}" -f $executed, $required, $done.Status, $results.Count, $counts.PASS, $counts.FAIL, $counts.SKIP, $counts.BLOCKED, $receipt.duration_seconds, $scope, (ConvertTo-OwSafeText $done.Path $root))
+exit $(switch ($done.Status) { 'PASS' { 0 } 'FAIL' { 1 } default { 3 } })

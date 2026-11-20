@@ -58,10 +58,10 @@ function Save([string]$Dir, [string]$Message, [string]$AName = $okName, [string]
 }
 function Run([string]$Tool, [string[]]$A, [hashtable]$Env = @{}) {
     $saved = @{}
-    foreach ($k in $Env.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, [string]$Env[$k]) }
+    foreach ($k in $Env.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); Set-OwEnvironmentVariable $k $Env[$k] }
     $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try { $out = @(& $pwsh -NoLogo -NoProfile -File (Join-Path $toolDir $Tool) @A 2>&1 | ForEach-Object { [string]$_ }); $code = $LASTEXITCODE }
-    finally { $ErrorActionPreference = $previous; foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) } }
+    finally { $ErrorActionPreference = $previous; foreach ($k in $saved.Keys) { Set-OwEnvironmentVariable $k $saved[$k] } }
     return [pscustomobject]@{ Code = $code; Text = ($out -join "`n") }
 }
 function No-Leak([string]$Text) { foreach ($n in $leakNeedles) { if ($Text.IndexOf($n, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $false } }; return $true }
@@ -161,8 +161,38 @@ try {
         Assert ($lvl -eq $cases[$k][1]) "A11 $k (got $lvl)"
     }
     Write-Text $rx $gateFile $gate0.Replace("$entry)", "$entry$newEntry)")
-    $lvl = (Get-OwVerificationPlan @($gateFile, 'tools/oss-workflow/README.md') $rx $r0).recommended
+    Write-Text $rx 'tests/validate-other.ps1' "Write-Output 'PASS  other'`nexit 0`n"
+    $lvl = (Get-OwVerificationPlan @($gateFile, 'tests/validate-other.ps1') $rx $r0).recommended
     Assert ($lvl -eq 'L2') "A11 a slice's own registration does not count as a second module (got $lvl)"
+    Remove-Item (Join-Path $rx 'tests/validate-other.ps1')
+
+    # A12: only pure-data registration entries may be classified as a registration.
+    $sha1 = 'a' * 40; $sha2 = 'b' * 40
+    function New-Entry([string]$Body) { return "    [pscustomobject]@{`n$Body`n    }`n" }
+    $okBody = "        Name      = `"NEW-SLICE`"`n        Base      = `"$sha1`"`n        Tip       = `"$sha2`"`n        Artifacts = @(`n            `"src/x.txt`")`n        Markers   = @{`n            `"src/x.txt`" = `"new marker`"`n        }"
+    $hardening = [ordered]@{
+        'a commented, well-formed entry is a registration'                = @(("    # NEW-SLICE: reviewed entry`n" + (New-Entry $okBody)), 'L2')
+        'an executable statement inside the list is rejected'             = @(((New-Entry $okBody) + "    Remove-Item -LiteralPath ./src/x.txt -WhatIf`n"), 'L3')
+        'a sub-expression inside an entry is rejected'                    = @((New-Entry $okBody.Replace('"NEW-SLICE"', '"$(Get-Date)"')), 'L3')
+        'an expandable string (variable) is rejected'                     = @((New-Entry $okBody.Replace("`"$sha1`"", '"$env:FIXTURE_BASE"')), 'L3')
+        'a variable value is rejected'                                    = @((New-Entry $okBody.Replace("`"$sha2`"", '$script:Lr14SliceCommit')), 'L3')
+        'a method call is rejected'                                       = @((New-Entry $okBody.Replace('"NEW-SLICE"', '"new-slice".ToUpper()')), 'L3')
+        'a missing Markers key is rejected'                               = @((New-Entry ($okBody -replace "(?s)`n        Markers.*$", '')), 'L3')
+        'an extra key is rejected'                                        = @((New-Entry ($okBody + "`n        Applies   = `"always`"")), 'L3')
+        'Artifacts that are not an array are rejected'                    = @((New-Entry $okBody.Replace("@(`n            `"src/x.txt`")", '"src/x.txt"')), 'L3')
+        'a hashtable instead of pscustomobject is rejected'               = @((New-Entry $okBody).Replace('[pscustomobject]', '[hashtable]'), 'L3')
+        'a Base that is not a 40-hex commit id is rejected'               = @((New-Entry $okBody.Replace($sha1, 'HEAD~1')), 'L3')
+        'a marker for a file outside Artifacts is rejected'               = @((New-Entry $okBody.Replace('"src/x.txt" = "new marker"', '"src/y.txt" = "new marker"')), 'L3')
+        'an entry spliced into an existing statement is rejected'         = @($null, 'L3')
+    }
+    foreach ($k in $hardening.Keys) {
+        $text = if ($null -eq $hardening[$k][0]) { $gate0.Replace("    }`n)", "    },`n" + (New-Entry $okBody).TrimEnd("`n") + "`n)") } else { $gate0.Replace("$entry)", "$entry$($hardening[$k][0]))") }
+        Assert ($text -cne $gate0) "A12 fixture: the case really changes the gate ($k)"
+        Write-Text $rx $gateFile $text
+        $lvl = (Get-OwVerificationPlan @($gateFile) $rx $r0).recommended
+        Assert ($lvl -eq $hardening[$k][1]) "A12 $k (got $lvl)"
+    }
+    Write-Text $rx $gateFile $gate0.Replace("$entry)", "$entry$newEntry)")
     $null = Save $rx 'register new slice'
     $r = Run 'Invoke-TieredVerification.ps1' @('-RepositoryRoot', $rx)
     Assert ($r.Code -eq 0 -and $r.Text -match 'level=L2 required=L2 status=PASS' -and $r.Text -match 'PASS\s+l2:lr14-scope-regression' -and $r.Text -match 'PASS\s+l2:lr14-scope') 'A11 a registration runs the LR-14 gate and its regression at L2'
@@ -277,6 +307,77 @@ try {
     Assert ($r.Text -match 'ci:04:Expression step：BLOCKED' -and $r.Text -match 'L3 ci:04:Expression step：BLOCKED') 'E4 BLOCKED checks appear under not executed and open issues'
     $r = Run $V @('-RepositoryRoot', $fx, '-Level', 'L4')
     Assert ($r.Code -eq 3 -and $r.Text -match 'L4 runs only on a clean checkout') 'R12 L4 refuses a checkout that is not the base tip'
+
+    # -----------------------------------------------------------------
+    # FIX1: receipt reuse can never bypass identity privacy or a moving state
+    # -----------------------------------------------------------------
+    $ux = New-Fixture 'reuse-identity'
+    Write-Text $ux 'docs/guide.md' "# Guide`n"
+    Write-Text $ux 'tests/validate-local-router-lr14-scope.ps1' $fakeGate
+    $u0 = Save $ux 'init'
+    $null = G $ux @('update-ref', 'refs/remotes/origin/main', $u0)
+    Write-Text $ux 'docs/guide.md' "# Guide`nchanged`n"
+    $r = Run $V @('-RepositoryRoot', $ux)
+    Assert ($r.Code -eq 0 -and $r.Text -match 'status=PASS') 'U1 setup: a PASS receipt exists for the documentation change'
+    $r = Run $V @('-RepositoryRoot', $ux, '-ReuseReceipt')
+    $reused = Get-Content -Raw @(Get-Receipts $ux)[-1].FullName | ConvertFrom-Json -DateKind String
+    $idc = @($reused.checks | Where-Object { $_.id -eq 'l1:identity-privacy' })[0]
+    Assert ($r.Code -eq 0 -and $r.Text -match 'identity privacy re-checked live' -and $idc.reused -eq $false -and @($reused.checks | Where-Object { $_.reused -eq $true }).Count -ge 3) 'U1 every reuse re-runs the identity privacy check live (only the other checks are reused)'
+    $null = G $ux @('config', 'user.email', $badMail)
+    $r = Run $V @('-RepositoryRoot', $ux, '-ReuseReceipt')
+    $last = Get-Content -Raw @(Get-Receipts $ux)[-1].FullName
+    Assert ($r.Code -eq 1 -and $r.Text -match 'status=FAIL' -and $r.Text -notmatch 'status=PASS' -and (No-Leak $r.Text) -and (No-Leak $last)) 'U2 after the local identity changes, -ReuseReceipt fails and neither output nor receipt carries the identity'
+    Assert ((ConvertFrom-Json $last -DateKind String).environment.identity_local_config -eq 'not-approved') 'U2 the receipt records only the identity verdict label'
+    $null = G $ux @('config', 'user.email', $okMail)
+    $r = Run $V @('-RepositoryRoot', $ux, '-ReuseReceipt') @{ GIT_AUTHOR_NAME = $badName; GIT_AUTHOR_EMAIL = $badMail }
+    Assert ($r.Code -eq 1 -and $r.Text -match 'status=FAIL' -and (No-Leak $r.Text)) 'U3 a GIT_AUTHOR_* override cannot pass through -ReuseReceipt'
+    Assert ($null -eq [Environment]::GetEnvironmentVariable('GIT_AUTHOR_NAME') -and $null -eq [Environment]::GetEnvironmentVariable('GIT_AUTHOR_EMAIL')) 'U3 a temporary override is removed afterwards, not left as an empty variable'
+    $r = Run $V @('-RepositoryRoot', $ux, '-ReuseReceipt')
+    Assert ($r.Code -eq 0 -and $r.Text -match 'REUSED') 'U3 with the approved identity restored, the earlier PASS receipt is reusable again'
+    # Unreliable environment: no dotnet on PATH.
+    $gitDir = Split-Path (Get-Command git).Source -Parent
+    $bare = @{ PATH = "$gitDir;$env:SystemRoot\System32"; DOTNET_ROOT = '' }
+    $r = Run $V @('-RepositoryRoot', $ux) $bare
+    $ur = Get-Content -Raw @(Get-Receipts $ux)[-1].FullName | ConvertFrom-Json -DateKind String
+    Assert ($ur.environment.reliable -eq $false -and $ur.environment.dotnet_sdk_at_repository_root -eq 'unavailable') 'U4 an environment without a resolvable SDK is recorded as not reliable'
+    $r = Run $V @('-RepositoryRoot', $ux, '-ReuseReceipt') $bare
+    Assert ($r.Text -match 'reuse: refused' -and $r.Text -notmatch 'REUSED') 'U4 receipts are never reused when the environment cannot be determined reliably'
+    # The state changes while checks run: no valid PASS.
+    Write-Text $ux 'tests/validate-mutating.ps1' "param([string]`$RepositoryRoot)`nAdd-Content -LiteralPath (Join-Path `$RepositoryRoot 'docs/guide.md') -Value 'written during verification'`nWrite-Output 'PASS  mutating validator'`nexit 0`n"
+    $null = G $ux @('checkout', '--', 'docs/guide.md')
+    $null = Save $ux 'add mutating validator'
+    $r = Run $V @('-RepositoryRoot', $ux)
+    $dr = Get-Content -Raw @(Get-Receipts $ux)[-1].FullName | ConvertFrom-Json -DateKind String
+    Assert ($r.Code -eq 3 -and $r.Text -match 'BLOCKED\s+integrity:state-stable' -and $dr.status -eq 'BLOCKED') 'U5 a working tree changed during verification yields BLOCKED, never a PASS receipt'
+    $null = G $ux @('checkout', '--', 'docs/guide.md')
+
+    # -----------------------------------------------------------------
+    # FIX1: higher levels never run less; uncovered changes upgrade to L3
+    # -----------------------------------------------------------------
+    $kx = New-Fixture 'coverage'
+    Write-Text $kx 'tests/validate-sample.ps1' $sampleValidator
+    Write-Text $kx 'tests/validate-extra.ps1' "param([string]`$RepositoryRoot)`nWrite-Output 'PASS  extra validator'`nexit 0`n"
+    Write-Text $kx 'tests/validate-local-router-lr14-scope.ps1' $fakeGate
+    Write-Text $kx 'tools/oss-workflow/tests/Test-OssWorkflowTools.ps1' "Write-Output 'OSS_WORKFLOW_TOOLS_SUMMARY PASS=1 FAIL=0'`nexit 0`n"
+    Write-Text $kx '.github/workflows/ci.yml' $ciYml
+    $k0 = Save $kx 'init'
+    $null = G $kx @('update-ref', 'refs/remotes/origin/main', $k0)
+    Write-Text $kx 'tools/oss-workflow/README.md' "# tools`n"
+    $null = Save $kx 'tool change'
+    $r = Run $V @('-RepositoryRoot', $kx, '-Level', 'L3')
+    Assert ($r.Code -eq 0 -and $r.Text -match 'PASS\s+l3:workflow-tools-tests') 'K1 L3 runs the workflow-tool tests when the tools change'
+    Write-Text $kx 'tests/validate-extra.ps1' "param([string]`$RepositoryRoot)`nWrite-Output 'PASS  extra validator v2'`nexit 0`n"
+    $null = Save $kx 'extra validator change'
+    $r = Run $V @('-RepositoryRoot', $kx, '-Level', 'L3')
+    Assert ($r.Text -match 'PASS\s+l3:validator:validate-extra' -and $r.Text -notmatch 'l3:validator:validate-sample') 'K2 L3 adds a selected validator that ci.yml does not run (and does not repeat one it runs)'
+    $p = Get-OwVerificationPlan @('local-router/src/Router.Unknown/Thing.cs') $kx $k0
+    Assert ($p.recommended -eq 'L3' -and ($p.reasons -join ' ') -match 'not in the .NET project graph') 'K3 a project that cannot be resolved upgrades to L3'
+    $p = Get-OwVerificationPlan @('tests/fixtures/orphan/data.json') $kx $k0
+    Assert ($p.recommended -eq 'L3' -and ($p.reasons -join ' ') -match 'no validator references this fixture') 'K4 a fixture no validator references upgrades to L3'
+    $p = Get-OwVerificationPlan @('tests/validate-removed.ps1') $kx $k0
+    Assert ($p.recommended -eq 'L3' -and ($p.reasons -join ' ') -match 'validator itself was removed') 'K5 a removed validator upgrades to L3'
+    $p = Get-OwVerificationPlan @('local-router/src/Router.ProviderAdapters.OpenAI/OpenAIProviderAdapter.cs') $RepositoryRoot (G $RepositoryRoot @('rev-parse', 'HEAD'))[0]
+    Assert ($p.recommended -eq 'L2') 'K6 a real project with a covering test project stays L2'
 
     # =====================================================================
     # C. LR-14 candidate generator

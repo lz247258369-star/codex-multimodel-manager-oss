@@ -27,6 +27,19 @@ partial results and L3/L4 are local reproductions. **No local receipt is a
 GitHub CI result**; the Development Gate on the pull request and on `main`
 stays required. SKIP and BLOCKED are never PASS.
 
+- A change counts as L2 only when real tests cover it (a project in the .NET
+  project graph with a test project, an existing validator, a fixture some
+  validator references, the tool tests). Anything else is upgraded to L3.
+- L3/L4 also run the tests that `ci.yml` does not run but L2 would (the tool
+  tests and selected validators missing from `ci.yml`), so a higher level never
+  runs less.
+- The LR-14 gate file counts as a registration (L2) only when the change is a
+  single insertion of new, pure-data entries (quoted constants only, exactly
+  `Name`/`Base`/`Tip`/`Artifacts`/`Markers`) plus comments; every existing line
+  must stay byte-identical. Anything else is a gate change (L3).
+- If HEAD, the tree, the working tree or the environment changes while the
+  checks run, the result is BLOCKED and no PASS receipt is written.
+
 ```powershell
 pwsh tools/oss-workflow/Invoke-TieredVerification.ps1 -PlanOnly
 pwsh tools/oss-workflow/Invoke-TieredVerification.ps1            # recommended level
@@ -35,8 +48,13 @@ pwsh tools/oss-workflow/Invoke-TieredVerification.ps1 -ReuseReceipt
 
 Receipts are written to `.git/oss-workflow/receipts/` (never tracked). A receipt
 is reused only when commit, tree, uncommitted changes, base, environment (OS,
-pwsh, Git, resolved and installed .NET SDKs, runner image, machine), tool
-version, level and planned checks are all identical and its self-hash is intact.
+pwsh and dotnet executables, Git, resolved and installed .NET SDKs, build
+environment variables, runner image, machine, identity verdicts), tool version,
+level and planned checks are all identical and its self-hash is intact. Values
+that could identify a person or a path are stored as verdict labels or hashes
+only. Reuse is refused when the environment cannot be determined reliably, and
+the identity privacy check is always re-run live: a reused receipt can never
+turn a failing identity into a PASS.
 
 ## Before pushing
 
