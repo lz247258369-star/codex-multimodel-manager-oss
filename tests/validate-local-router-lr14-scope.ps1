@@ -1037,6 +1037,19 @@ $script:RegisteredSlices = @(
             "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "OSS workflow tools validation PASSED"
         }
     }
+    # OSS-M4-1-RECEIPT-FAIL-LINES: receipts record explicit FAIL lines before diagnostic noise. Tools only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-1-RECEIPT-FAIL-LINES"
+        Base      = "52af5882e9a6beb6cb43c0b17616751dc413dfd9"
+        Tip       = "fc828460a59ab915453034a2df7ab6ae4483052e"
+        Artifacts = @(
+            "tools/oss-workflow/Invoke-TieredVerification.ps1",
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1")
+        Markers   = @{
+            "tools/oss-workflow/Invoke-TieredVerification.ps1" = "# Failure evidence: explicit FAIL lines first, then other error lines."
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "R8 the receipt records the explicit FAIL line before diagnostic noise"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
