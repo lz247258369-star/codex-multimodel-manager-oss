@@ -110,9 +110,16 @@ foreach ($v in $valid) {
     Add ''
     Add ("收据 ``{0}``，键 ``{1}``" -f $v.file, $r.receipt_key.Substring(0, 16))
     Add ''
-    Add '| 检查 | 状态 | 秒 | 摘要 |'
-    Add '|---|---|---|---|'
-    foreach ($c in $r.checks) { Add ("| {0} | {1} | {2} | {3} |" -f (Cell $c.id), $c.status, $c.duration_seconds, (Cell $c.summary)) }
+    if ($r.PSObject.Properties.Name -contains 'historical_receipt' -and $null -ne $r.historical_receipt) {
+        Add ("历史记录：存在相同的 {0} PASS 收据 ``{1}``，仅作记录，未复用；本收据中的检查均为本次实际执行。" -f $r.historical_receipt.level, $r.historical_receipt.file)
+        Add ''
+    }
+    Add '| 检查 | 来源 | 状态 | 秒 | 摘要 |'
+    Add '|---|---|---|---|---|'
+    foreach ($c in $r.checks) {
+        $source = if ($c.PSObject.Properties.Name -contains 'reused' -and $c.reused -eq $true) { '复用历史（L1）' } else { '本次执行' }
+        Add ("| {0} | {1} | {2} | {3} | {4} |" -f (Cell $c.id), $source, $c.status, $c.duration_seconds, (Cell $c.summary))
+    }
     Add ''
 }
 if ($excluded.Count -gt 0) {

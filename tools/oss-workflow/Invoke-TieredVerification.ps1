@@ -21,9 +21,13 @@
   result, and GitHub CI stays required.
 
   Receipts are written under <git dir>/oss-workflow/receipts. -ReuseReceipt
-  reuses an earlier PASS receipt only when its key (commit, tree, uncommitted
-  changes, base, environment, tool version, level and planned checks) is
-  identical and its self-hash is intact.
+  applies to L1 (static checks) only: it reuses an earlier PASS receipt when its
+  key (commit, tree, uncommitted changes, base, environment, tool version,
+  level and planned checks) is identical and its self-hash is intact, and the
+  identity privacy check is always re-run live. At L2/L3/L4 every check is
+  executed again; an identical earlier receipt is only recorded as history.
+  -ListReceipts shows the stored receipts and whether each still describes the
+  current state.
 
   Exit codes: 0 PASS (or -PlanOnly), 1 FAIL, 2 tool error, 3 BLOCKED or
   INCOMPLETE (a check was skipped or could not run; never a PASS).
@@ -34,6 +38,7 @@ param(
     [string]$BaseRef = 'origin/main',
     [switch]$PlanOnly,
     [switch]$ReuseReceipt,
+    [switch]$ListReceipts,
     [string]$ReceiptDirectory
 )
 Set-StrictMode -Version 3.0
@@ -85,22 +90,31 @@ function Invoke-Check([object]$Check, [string]$Root) {
     catch { $res = [ordered]@{ status = 'BLOCKED'; exit_code = $null; summary = (ConvertTo-OwSafeText ("check could not run: " + $_.Exception.Message) $Root); failures = @() } }
     return [ordered]@{
         id = $Check.id; kind = $Check.kind; command = $Check.command; condition = $Check.condition
-        status = [string]$res.status; exit_code = $res.exit_code
+        status = [string]$res.status; exit_code = $res.exit_code; reused = $false
         started_at = $t0.ToString('o'); duration_seconds = [math]::Round(([DateTime]::UtcNow - $t0).TotalSeconds, 2)
         summary = [string]$res.summary; failures = @($res.failures | ForEach-Object { ConvertTo-OwSafeText ([string]$_) $Root })
     }
 }
 
 # State that a receipt vouches for; compared at the start and the end of a run.
-function Get-StateSnapshot([string]$Root) {
+function Get-StateSnapshot([string]$Root, [string]$Base) {
     $h = (Invoke-OwGit -Root $Root -Arguments @('rev-parse', 'HEAD')).Lines[0]
-    return [ordered]@{ head = $h; tree = (Get-OwTree $Root $h); worktree = (Get-OwWorktreeState $Root); environment = (Get-OwEnvironment $Root) }
+    $b = (Invoke-OwGit -Root $Root -Arguments @('rev-parse', '--verify', '--quiet', "$Base^{commit}") -AllowFailure).Lines
+    $baseSha = if ($b.Count -eq 1) { $b[0] } else { 'unresolved' }
+    $mb = @(if ($baseSha -ne 'unresolved') { (Invoke-OwGit -Root $Root -Arguments @('merge-base', $baseSha, $h) -AllowFailure).Lines })
+    return [ordered]@{
+        head = $h; tree = (Get-OwTree $Root $h); worktree = (Get-OwWorktreeState $Root); environment = (Get-OwEnvironment $Root)
+        base_sha = $baseSha; merge_base = $(if ($mb.Count -eq 1) { $mb[0] } else { 'unresolved' }); tool = (Get-OwToolFingerprint).sha256
+    }
 }
 
 function Get-StateDrift([System.Collections.IDictionary]$Before, [System.Collections.IDictionary]$After) {
     $d = [System.Collections.Generic.List[string]]::new()
     if ($Before.head -cne $After.head) { $d.Add('HEAD changed') }
     if ($Before.tree -cne $After.tree) { $d.Add('tree changed') }
+    if ($Before.base_sha -cne $After.base_sha) { $d.Add('base reference changed') }
+    if ($Before.merge_base -cne $After.merge_base) { $d.Add('merge base changed') }
+    if ($Before.tool -cne $After.tool) { $d.Add('verification tool changed') }
     if ([string]$Before.worktree.fingerprint -cne [string]$After.worktree.fingerprint -or [bool]$Before.worktree.clean -ne [bool]$After.worktree.clean) { $d.Add('working tree changed') }
     foreach ($k in $Before.environment.Keys) { if ([string]$Before.environment[$k] -cne [string]$After.environment[$k]) { $d.Add("environment changed: $k") } }
     return @($d)
@@ -253,6 +267,38 @@ $keyInputs = [ordered]@{
 }
 $receiptKey = Get-OwReceiptKey $keyInputs
 $scope = if ($executed -in @('L1', 'L2')) { 'LOCAL-PARTIAL (not a CI result)' } else { 'LOCAL-FULL-REPRODUCTION (GitHub CI still required)' }
+$current = [ordered]@{ commit_sha = $head; tree_sha = $tree; merge_base_sha = $mergeBase; worktree = $worktree; environment = $environment; tool = $tool }
+
+# Earlier intact PASS receipt with exactly this key that still describes the
+# current state (never itself a reuse, never from an unreliable environment).
+function Find-MatchingReceipt {
+    if (-not (Test-Path -LiteralPath $receiptDir)) { return $null }
+    foreach ($c in @(Get-ChildItem -LiteralPath $receiptDir -Filter '*.json' -File | Sort-Object Name -Descending)) {
+        $rr = Read-OwReceipt $c.FullName
+        if (-not $rr.Intact) { continue }
+        $old = $rr.Receipt
+        if ($old.receipt_key -cne $receiptKey -or $old.status -cne 'PASS' -or $null -ne $old.reused_from -or $old.environment.reliable -ne $true) { continue }
+        if (@(Get-OwReceiptStaleReasons $old $current).Count -gt 0) { continue }
+        return [pscustomobject]@{ File = $c.Name; Receipt = $old }
+    }
+    return $null
+}
+
+if ($ListReceipts) {
+    # Read-only history query: nothing is verified or written.
+    $all = if (Test-Path -LiteralPath $receiptDir) { @(Get-ChildItem -LiteralPath $receiptDir -Filter '*.json' -File | Sort-Object Name) } else { @() }
+    foreach ($f in $all) {
+        $rr = Read-OwReceipt $f.FullName
+        if (-not $rr.Intact) { Write-Output ("{0}  ALTERED (self-hash or schema mismatch)" -f $f.Name); continue }
+        $x = $rr.Receipt
+        $stale = @(Get-OwReceiptStaleReasons $x $current)
+        $origin = if ($null -ne $x.reused_from) { "reused L1 from $($x.reused_from.file)" } else { 'executed' }
+        $hist = if ($x.PSObject.Properties.Name -contains 'historical_receipt' -and $null -ne $x.historical_receipt) { "; history: $($x.historical_receipt.file)" } else { '' }
+        Write-Output ("{0}  level={1} status={2} {3}{4}; {5}" -f $f.Name, $x.level_executed, $x.status, $origin, $hist, $(if ($stale.Count -eq 0) { 'describes the current state' } else { 'historical: ' + ($stale -join ', ') }))
+    }
+    Write-Output "OSS_VERIFY_RECEIPTS count=$($all.Count) (history only; listing verifies nothing)"
+    exit 0
+}
 
 if ($PlanOnly) {
     Write-Output "OSS_VERIFY_PLAN required=$required requested=$Level executes=$executed changed_files=$($changed.Count)"
@@ -281,6 +327,7 @@ $receipt = [ordered]@{
     ci_equivalent = $false
     note = 'Local evidence only. A local receipt never substitutes for the GitHub Development Gate.'
     reused_from = $null
+    historical_receipt = $null
     started_at = $started.ToString('o')
     finished_at = $null
     duration_seconds = $null
@@ -296,12 +343,12 @@ if ($blockedReason) {
     exit 3
 }
 
-$startState = [ordered]@{ head = $head; tree = $tree; worktree = $worktree; environment = $environment }
+$startState = [ordered]@{ head = $head; tree = $tree; worktree = $worktree; environment = $environment; base_sha = $baseSha; merge_base = $mergeBase; tool = $tool.sha256 }
 $identityCheck = @($checks | Where-Object { $_.id -eq 'l1:identity-privacy' })[0]
 
 function Complete-Receipt([System.Collections.Generic.List[object]]$Results) {
     # A receipt may vouch only for a state that did not change while it was produced.
-    $drift = @(Get-StateDrift $startState (Get-StateSnapshot $root))
+    $drift = @(Get-StateDrift $startState (Get-StateSnapshot $root $BaseRef))
     $message = $null
     if ($drift.Count -gt 0) {
         $Results.Add([ordered]@{ id = 'integrity:state-stable'; kind = 'integrity'; command = 'compare state at start and end'; condition = $null; status = 'BLOCKED'; exit_code = $null
@@ -318,19 +365,25 @@ function Complete-Receipt([System.Collections.Generic.List[object]]$Results) {
     return [pscustomobject]@{ Status = $status; Counts = $counts; Path = (Write-OwReceipt $receipt $receiptDir); Message = $message }
 }
 
-if ($ReuseReceipt -and -not $environment.reliable) {
+if ($ReuseReceipt -and $executed -ne 'L1') {
+    # Runtime checks (L2/L3/L4) are always executed again. An identical earlier
+    # PASS receipt is recorded as history only and never counts for this run.
+    $match = Find-MatchingReceipt
+    if ($match) {
+        $receipt.historical_receipt = [ordered]@{ file = $match.File; receipt_sha256 = $match.Receipt.receipt_sha256; level = $match.Receipt.level_executed; status = $match.Receipt.status
+            note = 'identical earlier receipt, recorded as history only; every check of this receipt was executed in this run' }
+        Write-Output "history: identical $($match.Receipt.level_executed) PASS receipt $($match.File) found; recorded as history, not reused"
+    }
+    Write-Output "reuse: not permitted at $executed; runtime checks are executed again (receipt reuse applies to L1 static checks only)"
+}
+elseif ($ReuseReceipt -and -not $environment.reliable) {
     Write-Output 'reuse: refused, the environment could not be determined reliably (SDK, Git or identity policy unavailable); verifying instead'
 }
-elseif ($ReuseReceipt -and (Test-Path -LiteralPath $receiptDir)) {
-    $current = [ordered]@{ commit_sha = $head; tree_sha = $tree; merge_base_sha = $mergeBase; worktree = $worktree; environment = $environment; tool = $tool }
-    $candidates = @(Get-ChildItem -LiteralPath $receiptDir -Filter '*.json' -File | Sort-Object Name -Descending)
-    $rejected = 0
-    foreach ($c in $candidates) {
-        $rr = Read-OwReceipt $c.FullName
-        if (-not $rr.Intact) { $rejected++; continue }
-        $old = $rr.Receipt
-        if ($old.receipt_key -cne $receiptKey -or $old.status -cne 'PASS' -or $null -ne $old.reused_from -or $old.environment.reliable -ne $true) { $rejected++; continue }
-        if (@(Get-OwReceiptStaleReasons $old $current).Count -gt 0) { $rejected++; continue }
+elseif ($ReuseReceipt) {
+    $match = Find-MatchingReceipt
+    if ($match) {
+        $c = Get-Item -LiteralPath (Join-Path $receiptDir $match.File)
+        $old = $match.Receipt
         # Identity privacy is always re-checked live; it is never taken from an old receipt.
         $results = [System.Collections.Generic.List[object]]::new()
         $live = Invoke-Check $identityCheck $root
@@ -345,7 +398,7 @@ elseif ($ReuseReceipt -and (Test-Path -LiteralPath $receiptDir)) {
         Write-Output ("OSS_VERIFY level={0} required={1} status={2} reused=true checks={3} seconds={4} scope={5} receipt={6}" -f $executed, $required, $done.Status, $results.Count, $receipt.duration_seconds, $scope, (ConvertTo-OwSafeText $done.Path $root))
         exit $(switch ($done.Status) { 'PASS' { 0 } 'FAIL' { 1 } default { 3 } })
     }
-    Write-Output "reuse: no matching PASS receipt ($rejected receipt(s) rejected: different key, not PASS, stale, altered or from an unreliable environment)"
+    Write-Output 'reuse: no matching PASS receipt (others differ in key, are not PASS, are stale or altered, or come from an unreliable environment)'
 }
 
 $results = [System.Collections.Generic.List[object]]::new()

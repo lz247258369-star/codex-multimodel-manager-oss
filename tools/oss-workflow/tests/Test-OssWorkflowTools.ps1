@@ -56,11 +56,11 @@ function Save([string]$Dir, [string]$Message, [string]$AName = $okName, [string]
     finally { $env:GIT_COMMITTER_NAME = $old.n; $env:GIT_COMMITTER_EMAIL = $old.e }
     return (G $Dir @('rev-parse', 'HEAD'))[0]
 }
-function Run([string]$Tool, [string[]]$A, [hashtable]$Env = @{}) {
+function Run([string]$Tool, [string[]]$A, [hashtable]$Env = @{}, [string]$FromToolDir = $toolDir) {
     $saved = @{}
     foreach ($k in $Env.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); Set-OwEnvironmentVariable $k $Env[$k] }
     $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    try { $out = @(& $pwsh -NoLogo -NoProfile -File (Join-Path $toolDir $Tool) @A 2>&1 | ForEach-Object { [string]$_ }); $code = $LASTEXITCODE }
+    try { $out = @(& $pwsh -NoLogo -NoProfile -File (Join-Path $FromToolDir $Tool) @A 2>&1 | ForEach-Object { [string]$_ }); $code = $LASTEXITCODE }
     finally { $ErrorActionPreference = $previous; foreach ($k in $saved.Keys) { Set-OwEnvironmentVariable $k $saved[$k] } }
     return [pscustomobject]@{ Code = $code; Text = ($out -join "`n") }
 }
@@ -265,6 +265,13 @@ try {
     $c1 = Save $fx 'fixture: docs and validator'
     $r = Run $V @('-RepositoryRoot', $fx)
     Assert ($r.Code -eq 0 -and $r.Text -match 'level=L2 required=L2 status=PASS' -and $r.Text -match 'l2:validator:validate-sample' -and $r.Text -match 'PASS\s+l2:lr14-scope') 'R7 a committed validator change runs L2 with the validator and the LR-14 gate'
+    # FIX2: an identical L2 PASS receipt exists, but L2 runtime checks are never reused.
+    $r = Run $V @('-RepositoryRoot', $fx, '-ReuseReceipt')
+    $n1 = Get-Content -Raw @(Get-Receipts $fx)[-1].FullName | ConvertFrom-Json -DateKind String
+    Assert ($r.Code -eq 0 -and $r.Text -match 'reuse: not permitted at L2' -and $r.Text -cnotmatch 'REUSED' -and $r.Text -match 'PASS\s+l2:validator:validate-sample \(') 'N1 L2 with -ReuseReceipt executes every runtime check again'
+    Assert ($null -eq $n1.reused_from -and $null -ne $n1.historical_receipt -and $n1.historical_receipt.status -eq 'PASS' -and @($n1.checks | Where-Object { $_.reused -ne $false }).Count -eq 0) 'N1 the identical L2 receipt is recorded as history only and every check is marked as executed'
+    $r = Run $V @('-RepositoryRoot', $fx, '-ListReceipts')
+    Assert ($r.Code -eq 0 -and $r.Text -match 'OSS_VERIFY_RECEIPTS count=' -and $r.Text -match 'history: ' -and $r.Text -match 'describes the current state' -and $r.Text -match 'historical: ') 'N1 -ListReceipts shows stored receipts and separates current from historical results'
     Write-Text $fx 'tests/validate-sample.ps1' "param([string]`$RepositoryRoot)`nWrite-Output 'PROBE_ERROR diagnostic noise'`nWrite-Output 'FAIL  sample broke'`nexit 1`n"
     $null = Save $fx 'fixture: break validator'
     $r = Run $V @('-RepositoryRoot', $fx)
@@ -286,6 +293,9 @@ try {
     Assert ($r.Text -match 'LOCAL-FULL-REPRODUCTION \(GitHub CI still required\)') 'R10 an L3 result still states that GitHub CI is required'
     $l3 = Get-Content -Raw @(Get-Receipts $fx)[-1].FullName | ConvertFrom-Json -DateKind String
     Assert (@($l3.not_executed | Where-Object { $_.item -match 'Checkout' }).Count -eq 1 -and @($l3.not_executed | Where-Object { $_.item -eq 'GitHub Development Gate' }).Count -eq 1) 'R10 GitHub-only steps and the GitHub gate are recorded as not executed'
+    $r = Run $V @('-RepositoryRoot', $fx, '-Level', 'L3', '-ReuseReceipt')
+    $n2 = Get-Content -Raw @(Get-Receipts $fx)[-1].FullName | ConvertFrom-Json -DateKind String
+    Assert ($r.Code -eq 0 -and $r.Text -match 'reuse: not permitted at L3' -and $r.Text -cnotmatch 'REUSED' -and $r.Text -match 'PASS\s+ci:02:Sample validator \(' -and $null -eq $n2.reused_from -and $null -ne $n2.historical_receipt) 'N2 L3 with -ReuseReceipt executes every CI step again; the identical receipt is history only'
 
     # Evidence report on the same fixture (valid L3 receipt for HEAD).
     $E = 'New-EvidenceReport.ps1'
@@ -334,6 +344,10 @@ try {
     Assert ($null -eq [Environment]::GetEnvironmentVariable('GIT_AUTHOR_NAME') -and $null -eq [Environment]::GetEnvironmentVariable('GIT_AUTHOR_EMAIL')) 'U3 a temporary override is removed afterwards, not left as an empty variable'
     $r = Run $V @('-RepositoryRoot', $ux, '-ReuseReceipt')
     Assert ($r.Code -eq 0 -and $r.Text -match 'REUSED') 'U3 with the approved identity restored, the earlier PASS receipt is reusable again'
+    $l1r = Get-Content -Raw @(Get-Receipts $ux)[-1].FullName | ConvertFrom-Json -DateKind String
+    Assert ($l1r.level_executed -eq 'L1' -and $null -ne $l1r.reused_from -and @($l1r.checks | Where-Object { $_.reused -eq $true -and $_.kind -ne 'static' }).Count -eq 0) 'N0 L1 reuse covers static checks only (identity is live)'
+    $r = Run $E @('-RepositoryRoot', $ux)
+    Assert ($r.Text -match '复用历史（L1）' -and $r.Text -match '\| l1:identity-privacy \| 本次执行 \|') 'N0 the evidence report separates reused history from checks executed in this run'
     # Unreliable environment: no dotnet on PATH.
     $gitDir = Split-Path (Get-Command git).Source -Parent
     $bare = @{ PATH = "$gitDir;$env:SystemRoot\System32"; DOTNET_ROOT = '' }
@@ -378,6 +392,37 @@ try {
     Assert ($p.recommended -eq 'L3' -and ($p.reasons -join ' ') -match 'validator itself was removed') 'K5 a removed validator upgrades to L3'
     $p = Get-OwVerificationPlan @('local-router/src/Router.ProviderAdapters.OpenAI/OpenAIProviderAdapter.cs') $RepositoryRoot (G $RepositoryRoot @('rev-parse', 'HEAD'))[0]
     Assert ($p.recommended -eq 'L2') 'K6 a real project with a covering test project stays L2'
+    # FIX2: L4 never reuses either (clean checkout of the base tip).
+    $null = G $kx @('update-ref', 'refs/remotes/origin/main', (G $kx @('rev-parse', 'HEAD'))[0])
+    $r = Run $V @('-RepositoryRoot', $kx, '-Level', 'L4')
+    Assert ($r.Code -eq 0 -and $r.Text -match 'level=L4' -and $r.Text -match 'status=PASS') 'N3 setup: L4 passes on a clean checkout of the base tip'
+    $r = Run $V @('-RepositoryRoot', $kx, '-Level', 'L4', '-ReuseReceipt')
+    $n3 = Get-Content -Raw @(Get-Receipts $kx)[-1].FullName | ConvertFrom-Json -DateKind String
+    Assert ($r.Code -eq 0 -and $r.Text -match 'reuse: not permitted at L4' -and $r.Text -cnotmatch 'REUSED' -and $null -eq $n3.reused_from -and $null -ne $n3.historical_receipt -and @($n3.checks | Where-Object { $_.reused -ne $false }).Count -eq 0) 'N3 L4 with -ReuseReceipt executes everything again; the identical receipt is history only'
+
+    # FIX2: the base reference or the tool fingerprint changing during a run is BLOCKED.
+    $bx = New-Fixture 'base-drift'
+    Write-Text $bx 'tests/validate-local-router-lr14-scope.ps1' $fakeGate
+    $b0 = Save $bx 'init'
+    $null = G $bx @('update-ref', 'refs/remotes/origin/main', $b0)
+    Write-Text $bx 'tests/validate-move-base.ps1' "param([string]`$RepositoryRoot)`n& git -C `$RepositoryRoot update-ref refs/remotes/origin/main HEAD`nWrite-Output 'PASS  moved the base reference'`nexit 0`n"
+    $null = Save $bx 'validator that moves the base'
+    $r = Run $V @('-RepositoryRoot', $bx)
+    $n4 = Get-Content -Raw @(Get-Receipts $bx)[-1].FullName | ConvertFrom-Json -DateKind String
+    Assert ($r.Code -eq 3 -and $r.Text -match 'BLOCKED\s+integrity:state-stable' -and $r.Text -match 'base reference changed' -and $r.Text -match 'merge base changed' -and $n4.status -eq 'BLOCKED') 'N4 a base reference moved during verification yields BLOCKED'
+    $copy = Join-Path $temp 'tool-copy'
+    $null = New-Item -ItemType Directory -Path $copy
+    Get-ChildItem $toolDir -File | Copy-Item -Destination $copy
+    $tx = New-Fixture 'tool-drift'
+    Write-Text $tx 'tests/validate-local-router-lr14-scope.ps1' $fakeGate
+    $t0 = Save $tx 'init'
+    $null = G $tx @('update-ref', 'refs/remotes/origin/main', $t0)
+    Write-Text $tx 'tests/validate-touch-tool.ps1' "param([string]`$RepositoryRoot)`nSet-Content -LiteralPath (Join-Path `$env:OW_TEST_TOOL_COPY 'drift-marker.json') -Value '{}'`nWrite-Output 'PASS  touched the tool'`nexit 0`n"
+    $null = Save $tx 'validator that changes the tool'
+    $r = Run $V @('-RepositoryRoot', $tx) @{ OW_TEST_TOOL_COPY = $copy } $copy
+    $n5 = Get-Content -Raw @(Get-Receipts $tx)[-1].FullName | ConvertFrom-Json -DateKind String
+    Assert ($r.Code -eq 3 -and $r.Text -match 'BLOCKED\s+integrity:state-stable' -and $r.Text -match 'verification tool changed' -and $n5.status -eq 'BLOCKED') 'N5 a verification-tool change during verification yields BLOCKED'
+    Assert (-not (Test-Path (Join-Path $toolDir 'drift-marker.json'))) 'N5 the real tool directory was not touched'
 
     # =====================================================================
     # C. LR-14 candidate generator

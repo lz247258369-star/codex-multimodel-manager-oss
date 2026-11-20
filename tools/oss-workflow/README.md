@@ -37,17 +37,26 @@ stays required. SKIP and BLOCKED are never PASS.
   single insertion of new, pure-data entries (quoted constants only, exactly
   `Name`/`Base`/`Tip`/`Artifacts`/`Markers`) plus comments; every existing line
   must stay byte-identical. Anything else is a gate change (L3).
-- If HEAD, the tree, the working tree or the environment changes while the
-  checks run, the result is BLOCKED and no PASS receipt is written.
+- If HEAD, the tree, the working tree, the environment, the base reference, the
+  merge base or the verification tool changes while the checks run, the result
+  is BLOCKED and no PASS receipt is written.
 
 ```powershell
 pwsh tools/oss-workflow/Invoke-TieredVerification.ps1 -PlanOnly
 pwsh tools/oss-workflow/Invoke-TieredVerification.ps1            # recommended level
-pwsh tools/oss-workflow/Invoke-TieredVerification.ps1 -ReuseReceipt
+pwsh tools/oss-workflow/Invoke-TieredVerification.ps1 -ReuseReceipt   # L1 only
+pwsh tools/oss-workflow/Invoke-TieredVerification.ps1 -ListReceipts   # history
 ```
 
-Receipts are written to `.git/oss-workflow/receipts/` (never tracked). A receipt
-is reused only when commit, tree, uncommitted changes, base, environment (OS,
+Receipts are written to `.git/oss-workflow/receipts/` (never tracked).
+**Reuse applies to L1 static checks only.** At L2, L3 and L4 every check is
+executed again even when an identical earlier PASS receipt exists; that receipt
+is recorded in the new one as `historical_receipt` (history only) and every
+check is marked `reused: false`. `-ListReceipts` lists stored receipts and
+whether each still describes the current state; it verifies nothing. The
+evidence report marks each check as executed in this run or reused L1 history.
+
+An L1 receipt is reused only when commit, tree, uncommitted changes, base, environment (OS,
 pwsh and dotnet executables, Git, resolved and installed .NET SDKs, build
 environment variables, runner image, machine, identity verdicts), tool version,
 level and planned checks are all identical and its self-hash is intact. Values
