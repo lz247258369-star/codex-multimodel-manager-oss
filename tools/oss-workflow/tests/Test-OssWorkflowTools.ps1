@@ -103,6 +103,12 @@ jobs:
           Write-Output "PASS  block line two"
 '@
 
+# A Windows checkout may store this file with CRLF line endings; every fixture
+# below is built and edited with LF, so the here-strings are normalised first.
+$fakeGate = $fakeGate.Replace("`r`n", "`n")
+$sampleValidator = $sampleValidator.Replace("`r`n", "`n")
+$ciYml = $ciYml.Replace("`r`n", "`n")
+
 try {
     # =====================================================================
     # A. Change classification and level policy (unit, real policy)
