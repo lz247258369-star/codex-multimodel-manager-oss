@@ -1086,6 +1086,45 @@ $script:RegisteredSlices = @(
             "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "N1 L2 with -ReuseReceipt executes every runtime check again"
         }
     }
+    # OSS-M4-2-CI-AUTOMATION: additive Development Gate steps (commit identity privacy in commit-range mode,
+    # model candidate intake, OSS workflow tools regression) and the read-only weekly mirror-drift workflow.
+    # No existing step, trigger, pin, gate logic or registration changed.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-CI-AUTOMATION"
+        Base      = "d3648a3f5f9b58fb8e28a6b8ce9770406055a67a"
+        Tip       = "30f8895327e27266f5204e98836522dfcbac773a"
+        Artifacts = @(
+            ".github/workflows/ci.yml",
+            ".github/workflows/mirror-drift.yml",
+            "tools/oss-workflow/New-EvidenceReport.ps1",
+            "tools/oss-workflow/OssWorkflow.psm1",
+            "tools/oss-workflow/README.md",
+            "tools/oss-workflow/Test-CommitIdentityPrivacy.ps1",
+            "tools/oss-workflow/Test-MirrorParity.ps1",
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1")
+        Markers   = @{
+            ".github/workflows/ci.yml" = "# OSS-M4-2: additive steps; every step above is unchanged."
+            ".github/workflows/mirror-drift.yml" = "name: Weekly Mirror Drift"
+            "tools/oss-workflow/New-EvidenceReport.ps1" = "# Redirected output (pipes, CI runners) is written as UTF-8 so the Chinese"
+            "tools/oss-workflow/OssWorkflow.psm1" = "-CommitsOnly (CI commit-range mode) only the commits are checked; the local"
+            "tools/oss-workflow/README.md" = "### In CI (Development Gate)"
+            "tools/oss-workflow/Test-CommitIdentityPrivacy.ps1" = "CI commit-range mode (-CommitRangeFromGitHubEvent, explicit switch only):"
+            "tools/oss-workflow/Test-MirrorParity.ps1" = "Read-only locator for drift between the installer and Skill copies that the"
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "P1 pull_request checks exactly base.sha..head.sha, never the synthetic merge commit"
+        }
+    }
+    # OSS-M4-2-FIX1-LF-FIXTURES: the workflow-tool tests normalise their here-string fixtures to LF
+    # (the runner checks the test file out with CRLF). Test scaffolding only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-FIX1-LF-FIXTURES"
+        Base      = "e7c861b06effe98823301214790861b35216ed3e"
+        Tip       = "758cff1e4affc923c9d6330a074c1384778311f9"
+        Artifacts = @(
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1")
+        Markers   = @{
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "# below is built and edited with LF, so the here-strings are normalised first."
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
