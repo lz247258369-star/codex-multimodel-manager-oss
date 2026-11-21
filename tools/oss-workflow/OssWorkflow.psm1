@@ -606,8 +606,10 @@ function Test-OwMessageEmails([string]$Text, [object]$Policy) {
     return $bad
 }
 
-# Checks every commit in Base..Head plus the effective local identity.
-function Test-OwIdentityPrivacy([string]$Root, [string]$BaseSha, [string]$HeadSha, [object]$Policy) {
+# Checks every commit in Base..Head plus the effective local identity. With
+# -CommitsOnly (CI commit-range mode) only the commits are checked; the local
+# identity is then not evaluated at all and is never reported as passing.
+function Test-OwIdentityPrivacy([string]$Root, [string]$BaseSha, [string]$HeadSha, [object]$Policy, [switch]$CommitsOnly) {
     $results = [System.Collections.Generic.List[object]]::new()
     $sep = [char]0x1f
     $fmt = "%H$sep%an$sep%ae$sep%cn$sep%ce$sep%P"
@@ -627,6 +629,7 @@ function Test-OwIdentityPrivacy([string]$Root, [string]$BaseSha, [string]$HeadSh
         $badMail = Test-OwMessageEmails $message $Policy
         $results.Add([pscustomobject]@{ commit = $short; field = 'message'; ok = ($badMail -eq 0); label = $(if ($badMail -eq 0) { 'no-unapproved-address' } else { "unapproved-address-count=$badMail" }) })
     }
+    if ($CommitsOnly) { return @($results) }
     # Effective local identity (config of this repository plus environment overrides).
     $cfgName = (Invoke-OwGit -Root $Root -Arguments @('config', '--get', 'user.name') -AllowFailure).Lines
     $cfgMail = (Invoke-OwGit -Root $Root -Arguments @('config', '--get', 'user.email') -AllowFailure).Lines
@@ -696,8 +699,11 @@ function Invoke-OwPwshFile([string]$Root, [string]$File, [string[]]$Arguments = 
     foreach ($k in $Environment.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); Set-OwEnvironmentVariable $k $Environment[$k] }
     Push-Location -LiteralPath $Root
     $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    try { $out = @(& $pwsh -NoLogo -NoProfile -File $File @Arguments 2>&1 | ForEach-Object { [string]$_ }); $code = $LASTEXITCODE }
+    # Decode child output as UTF-8 whatever the console code page (a CI runner has none).
+    $previousEncoding = [Console]::OutputEncoding
+    try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $out = @(& $pwsh -NoLogo -NoProfile -File $File @Arguments 2>&1 | ForEach-Object { [string]$_ }); $code = $LASTEXITCODE }
     finally {
+        [Console]::OutputEncoding = $previousEncoding
         $ErrorActionPreference = $previous
         Pop-Location
         foreach ($k in $saved.Keys) { Set-OwEnvironmentVariable $k $saved[$k] }

@@ -22,6 +22,9 @@ param(
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'OssWorkflow.psm1') -Force
+# Redirected output (pipes, CI runners) is written as UTF-8 so the Chinese
+# report text survives any console code page; an interactive console is left as is.
+if ([Console]::IsOutputRedirected) { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false) }
 
 try {
     $root = Get-OwRepositoryRoot $RepositoryRoot

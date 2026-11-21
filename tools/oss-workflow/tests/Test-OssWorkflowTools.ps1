@@ -60,8 +60,10 @@ function Run([string]$Tool, [string[]]$A, [hashtable]$Env = @{}, [string]$FromTo
     $saved = @{}
     foreach ($k in $Env.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); Set-OwEnvironmentVariable $k $Env[$k] }
     $previous = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    try { $out = @(& $pwsh -NoLogo -NoProfile -File (Join-Path $FromToolDir $Tool) @A 2>&1 | ForEach-Object { [string]$_ }); $code = $LASTEXITCODE }
-    finally { $ErrorActionPreference = $previous; foreach ($k in $saved.Keys) { Set-OwEnvironmentVariable $k $saved[$k] } }
+    # Decode the tools' output as UTF-8 on any runner (CI runners have no console code page).
+    $previousEncoding = [Console]::OutputEncoding
+    try { [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $out = @(& $pwsh -NoLogo -NoProfile -File (Join-Path $FromToolDir $Tool) @A 2>&1 | ForEach-Object { [string]$_ }); $code = $LASTEXITCODE }
+    finally { $ErrorActionPreference = $previous; [Console]::OutputEncoding = $previousEncoding; foreach ($k in $saved.Keys) { Set-OwEnvironmentVariable $k $saved[$k] } }
     return [pscustomobject]@{ Code = $code; Text = ($out -join "`n") }
 }
 function No-Leak([string]$Text) { foreach ($n in $leakNeedles) { if ($Text.IndexOf($n, [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $false } }; return $true }
@@ -254,7 +256,7 @@ try {
     Assert ($r.Code -eq 0 -and $r.Text -notmatch 'REUSED') 'R3 a changed working tree is verified again, not reused'
     $r = Run $V @('-RepositoryRoot', $fx, '-ReuseReceipt') @{ ImageVersion = 'fixture-image-2' }
     Assert ($r.Text -notmatch 'REUSED') 'R4 a different environment (runner image) is verified again, not reused'
-    $latest = @(Get-Receipts $fx | Where-Object { (Get-Content -Raw $_.FullName | ConvertFrom-Json -DateKind String).environment.image_version -eq '' -and $null -eq (Get-Content -Raw $_.FullName | ConvertFrom-Json -DateKind String).reused_from })[-1]
+    $latest = @(Get-Receipts $fx | Where-Object { (Get-Content -Raw $_.FullName | ConvertFrom-Json -DateKind String).environment.image_version -eq [string]$env:ImageVersion -and $null -eq (Get-Content -Raw $_.FullName | ConvertFrom-Json -DateKind String).reused_from })[-1]
     $t = [IO.File]::ReadAllText($latest.FullName); [IO.File]::WriteAllText($latest.FullName, $t.Replace('"duration_seconds": ', '"duration_seconds":  '))
     $r = Run $V @('-RepositoryRoot', $fx, '-ReuseReceipt')
     Assert ($r.Text -notmatch 'REUSED' -and -not (Read-OwReceipt $latest.FullName).Intact) 'R5 an altered receipt is never reused'
@@ -575,6 +577,158 @@ try {
     $null = G $px @('switch', '-q', 'bad-author')
     $r = Run $E @('-RepositoryRoot', $px, '-BaseRef', $p1)
     Assert ($r.Text -match '结果：\*\*FAIL' -and (No-Leak $r.Text)) 'E5 the evidence report shows a privacy FAIL without the identity'
+
+    # =====================================================================
+    # P. CI commit-range mode (OSS-M4-2): exactly the commits an event introduces
+    # =====================================================================
+    $cx = New-Fixture 'ci-range'
+    Write-Text $cx 'f.txt' "0`n"; $q0 = Save $cx 'init'
+    Write-Text $cx 'f.txt' "1`n"; $q1 = Save $cx 'main one'
+    Write-Text $cx 'f.txt' "2`n"; $q2 = Save $cx 'main two'
+    $null = G $cx @('switch', '-q', '-c', 'pr', $q0)
+    Write-Text $cx 'p.txt' "p1`n"; $null = Save $cx 'pr one'
+    Write-Text $cx 'p.txt' "p2`n"; $p2 = Save $cx 'pr two'
+    # GitHub-style synthetic merge of the PR into main, made by an unapproved identity: never in range.
+    $old = @{ n = $env:GIT_COMMITTER_NAME; e = $env:GIT_COMMITTER_EMAIL }
+    try { $env:GIT_COMMITTER_NAME = $badName; $env:GIT_COMMITTER_EMAIL = $badMail; $synthetic = (G $cx @('-c', "user.name=$badName", '-c', "user.email=$badMail", 'commit-tree', "$p2^{tree}", '-p', $q2, '-p', $p2, '-m', 'Merge pr into main'))[0] } finally { Set-OwEnvironmentVariable 'GIT_COMMITTER_NAME' $old.n; Set-OwEnvironmentVariable 'GIT_COMMITTER_EMAIL' $old.e }
+    $null = G $cx @('switch', '-q', '--detach', $synthetic)
+    function Write-Event([string]$Name, [object]$Body) { $f = Join-Path $temp ("event-$Name-" + [guid]::NewGuid().ToString('N').Substring(0, 6) + '.json'); [IO.File]::WriteAllText($f, ($Body | ConvertTo-Json -Depth 5)); return $f }
+    function RunCi([string]$Root, [string]$EventName, [string]$EventFile, [hashtable]$Env = @{}) { return (Run $P @('-RepositoryRoot', $Root, '-CommitRangeFromGitHubEvent', '-EventName', $EventName, '-EventPath', $EventFile) $Env) }
+    $prEvent = Write-Event 'pr' @{ pull_request = @{ base = @{ sha = $q2 }; head = @{ sha = $p2 } } }
+    $r = RunCi $cx 'pull_request' $prEvent
+    Assert ($r.Code -eq 0 -and $r.Text -match 'PRIVACY_GATE PASS commits=2 failures=0' -and $r.Text -match 'mode=ci-commit-range event=pull_request' -and $r.Text -notmatch $synthetic.Substring(0, 12) -and (No-Leak $r.Text)) 'P1 pull_request checks exactly base.sha..head.sha, never the synthetic merge commit'
+    $null = G $cx @('switch', '-q', '-c', 'pr-bad', $p2); Write-Text $cx 'p.txt' "bad`n"; $pb = Save $cx 'bad pr commit' $badName $badMail
+    $r = RunCi $cx 'pull_request' (Write-Event 'prbad' @{ pull_request = @{ base = @{ sha = $q2 }; head = @{ sha = $pb } } })
+    Assert ($r.Code -eq 1 -and $r.Text -match 'author\s+not-approved' -and (No-Leak $r.Text)) 'P2 an unapproved commit inside the pull request range fails without printing the identity'
+    $null = G $cx @('switch', '-q', '--detach', $q2)
+    $r = RunCi $cx 'push' (Write-Event 'push' @{ before = $q0; after = $q2 })
+    Assert ($r.Code -eq 0 -and $r.Text -match 'PRIVACY_GATE PASS commits=2' -and $r.Text -match 'event=push') 'P3 push checks exactly before..after'
+    $r = RunCi $cx 'push' (Write-Event 'pushmismatch' @{ before = $q0; after = $q1 })
+    Assert ($r.Code -eq 2 -and $r.Text -match 'code=HEAD_MISMATCH') 'P4 a push whose after is not the checked-out HEAD is BLOCKED'
+    $r = RunCi $cx 'push' (Write-Event 'pushzero' @{ before = ('0' * 40); after = $q2 })
+    Assert ($r.Code -eq 2 -and $r.Text -match 'code=NEW_REF_NO_BASE') 'P5 an all-zero before is BLOCKED instead of trusting the whole history'
+    $r = RunCi $cx 'push' (Write-Event 'pushempty' @{ before = $q2; after = $q2 })
+    Assert ($r.Code -eq 2 -and $r.Text -match 'code=EMPTY_RANGE' -and $r.Text -notmatch 'PRIVACY_GATE PASS') 'P6 an empty range (base already at HEAD) is BLOCKED, never a PASS'
+    $r = RunCi $cx 'pull_request' (Write-Event 'prmissing' @{ pull_request = @{ base = @{ sha = ('1234567890abcdef' * 3).Substring(0, 40) }; head = @{ sha = $p2 } } })
+    Assert ($r.Code -eq 2 -and $r.Text -match 'code=MISSING_RANGE_COMMIT') 'P7 a range commit missing from the checkout is BLOCKED'
+    $r = Run $P @('-RepositoryRoot', $cx, '-CommitRangeFromGitHubEvent', '-EventName', '', '-EventPath', '')
+    Assert ($r.Code -eq 2 -and $r.Text -match 'code=NO_GITHUB_EVENT') 'P8 commit-range mode without a GitHub event is BLOCKED'
+    $r = RunCi $cx 'issues' (Write-Event 'issues' @{ action = 'opened' })
+    Assert ($r.Code -eq 2 -and $r.Text -match 'code=UNSUPPORTED_EVENT') 'P9 an unsupported event is BLOCKED'
+    # GitHub web merge on main: approved author, GitHub committer, a real merge.
+    $null = G $cx @('switch', '-q', '-C', 'main', $q2)
+    $old = @{ n = $env:GIT_COMMITTER_NAME; e = $env:GIT_COMMITTER_EMAIL }
+    try { $env:GIT_COMMITTER_NAME = 'GitHub'; $env:GIT_COMMITTER_EMAIL = 'noreply@github.com'; $null = G $cx @('-c', "user.name=$okName", '-c', "user.email=$okMail", 'merge', '-q', '--no-ff', '--no-edit', 'pr') } finally { Set-OwEnvironmentVariable 'GIT_COMMITTER_NAME' $old.n; Set-OwEnvironmentVariable 'GIT_COMMITTER_EMAIL' $old.e }
+    $webMerge = (G $cx @('rev-parse', 'HEAD'))[0]
+    $r = RunCi $cx 'push' (Write-Event 'pushmerge' @{ before = $q2; after = $webMerge })
+    Assert ($r.Code -eq 0 -and $r.Text -match 'PRIVACY_GATE PASS commits=3' -and $r.Text -match 'committer\s+github-web-merge') 'P10 a push of a GitHub web merge checks the merge and the merged commits'
+    $r = RunCi $cx 'workflow_dispatch' (Write-Event 'dispatch' @{ ref = 'refs/heads/main' })
+    Assert ($r.Code -eq 0 -and $r.Text -match 'PRIVACY_GATE PASS commits=3' -and $r.Text -match 'event=workflow_dispatch') 'P11 workflow_dispatch checks the commits introduced by HEAD'
+    $null = G $cx @('switch', '-q', '--detach', $q0)
+    $r = RunCi $cx 'schedule' (Write-Event 'schedule' @{ schedule = '17 3 * * 1' })
+    Assert ($r.Code -eq 2 -and $r.Text -match 'code=MISSING_RANGE_COMMIT') 'P11 a scheduled run on a root commit is BLOCKED (no introduced range)'
+    $null = G $cx @('switch', '-q', 'main')
+    # Boundary: CI history mode never evaluates, and never vouches for, the local identity.
+    $null = G $cx @('config', 'user.email', $badMail)
+    $pushMergeEvent = Write-Event 'pushmerge2' @{ before = $q2; after = $webMerge }
+    $r = RunCi $cx 'push' $pushMergeEvent
+    Assert ($r.Code -eq 0 -and $r.Text -match 'NOTE  local Git identity not checked in commit-range mode' -and $r.Text -notmatch 'git-config' -and (No-Leak $r.Text)) 'P12 commit-range mode leaves the local identity out and says so'
+    $r = Run $P @('-RepositoryRoot', $cx, '-BaseRef', $q2) @{ GITHUB_EVENT_NAME = 'push'; GITHUB_EVENT_PATH = $pushMergeEvent; GITHUB_ACTIONS = 'true' }
+    Assert ($r.Code -eq 1 -and $r.Text -match 'git-config\s+not-approved' -and (No-Leak $r.Text)) 'P12 GitHub environment variables alone never switch off the local identity check'
+    $r = Run $P @('-RepositoryRoot', $cx, '-CommitRangeFromGitHubEvent', '-EventName', 'push', '-EventPath', $pushMergeEvent, '-Json')
+    $pj = $r.Text | ConvertFrom-Json
+    Assert ($pj.mode -eq 'ci-commit-range' -and $pj.local_identity -match 'not checked' -and $pj.status -eq 'PASS' -and (No-Leak $r.Text)) 'P13 JSON output states the mode and that the local identity was not checked'
+    $null = G $cx @('config', 'user.email', $okMail)
+
+    # =====================================================================
+    # M. Mirror drift locator (OSS-M4-2): rules come from the existing validators
+    # =====================================================================
+    $M = 'Test-MirrorParity.ps1'
+    $mx = New-Fixture 'mirror'
+    $mirrorFiles = @('tests/validate-stealth-registry.ps1', 'tests/validate-health-check.ps1', 'tests/validate-profile-v2.ps1')
+    foreach ($n in @('sync-stealth-registry.ps1', 'record-stealth-reveal.ps1', 'launch-stealth-model.ps1', 'stealth-model-center.ps1', 'health-check.ps1', 'migrate-profile-v2.ps1')) { $mirrorFiles += "installer/scripts/$n"; $mirrorFiles += "skill/codex-multimodel-manager/scripts/$n" }
+    foreach ($f in $mirrorFiles) { $dst = Join-Path $mx $f; $null = New-Item -ItemType Directory -Force -Path (Split-Path $dst -Parent); Copy-Item -LiteralPath (Join-Path $RepositoryRoot $f) -Destination $dst }
+    $null = Save $mx 'mirror fixture'
+    $r = Run $M @('-RepositoryRoot', $mx)
+    Assert ($r.Code -eq 0 -and $r.Text -match 'MIRROR_PARITY status=PASS pairs=6 drift=0') 'M1 the six declared mirror pairs are read from the existing validators and found identical'
+    $stealth = Join-Path $mx 'skill/codex-multimodel-manager/scripts/launch-stealth-model.ps1'
+    $lines = [IO.File]::ReadAllLines($stealth); $lines[2] = $lines[2] + ' # drift'; [IO.File]::WriteAllLines($stealth, $lines)
+    $r = Run $M @('-RepositoryRoot', $mx)
+    Assert ($r.Code -eq 1 -and $r.Text -match 'MIRROR DRIFT  installer/scripts/launch-stealth-model\.ps1 <-> skill/codex-multimodel-manager/scripts/launch-stealth-model\.ps1 \[sha256' -and $r.Text -match 'first difference at line 3' -and $r.Text -match 'skill    : .*# drift') 'M2 a drifted copy fails with the exact pair and first differing line'
+    $null = G $mx @('checkout', '--', '.')
+    # Toggle the line endings of one copy per pair (CRLF <-> LF), nothing else.
+    function Switch-LineEndings([string]$Path) {
+        $t = [IO.File]::ReadAllText($Path)
+        $n = if ($t.Contains("`r`n")) { $t.Replace("`r`n", "`n") } else { $t.Replace("`n", "`r`n") }
+        [IO.File]::WriteAllText($Path, $n)
+        return ($n -cne $t)
+    }
+    $hc = Join-Path $mx 'skill/codex-multimodel-manager/scripts/health-check.ps1'
+    $pv = Join-Path $mx 'skill/codex-multimodel-manager/scripts/migrate-profile-v2.ps1'
+    Assert ((Switch-LineEndings $hc) -and (Switch-LineEndings $pv)) 'M3 fixture: the line endings of both copies really changed'
+    $r = Run $M @('-RepositoryRoot', $mx)
+    Assert ($r.Text -match 'MIRROR IDENTICAL  installer/scripts/health-check\.ps1' -and $r.Text -match 'migrate-profile-v2\.ps1 \[text; .* same lines, bytes differ' -and $r.Code -eq 1) 'M3 each pair keeps its own validator rule (health-check ignores line endings, profile-v2 does not)'
+    $null = G $mx @('checkout', '--', '.')
+    Remove-Item (Join-Path $mx 'skill/codex-multimodel-manager/scripts/record-stealth-reveal.ps1')
+    $r = Run $M @('-RepositoryRoot', $mx)
+    Assert ($r.Code -eq 1 -and $r.Text -match 'record-stealth-reveal\.ps1 \[sha256; .*missing skill/codex-multimodel-manager/scripts/record-stealth-reveal\.ps1') 'M4 a missing mirror copy is reported as drift'
+    $null = G $mx @('checkout', '--', '.')
+    $sr = Join-Path $mx 'tests/validate-stealth-registry.ps1'
+    $orig = [IO.File]::ReadAllText($sr)
+    [IO.File]::WriteAllText($sr, ($orig -replace '(?s)\$shared = @\(.*?\)', '$shared = @(Get-ChildItem -Name)'))
+    $r = Run $M @('-RepositoryRoot', $mx)
+    Assert ($r.Code -eq 2 -and $r.Text -match 'MIRROR_PARITY status=BLOCKED code=MIRROR_RULES_UNREADABLE') 'M5 a mirror list that is not a constant is BLOCKED, never guessed'
+    Remove-Item (Join-Path $mx 'tests/validate-profile-v2.ps1')
+    [IO.File]::WriteAllText($sr, $orig)
+    $r = Run $M @('-RepositoryRoot', $mx)
+    Assert ($r.Code -eq 2 -and $r.Text -match 'validate-profile-v2\.ps1 is missing') 'M5 a missing parity validator is BLOCKED'
+    $null = G $mx @('checkout', '--', '.')
+    $before = (G $mx @('status', '--porcelain')).Count
+    $null = Run $M @('-RepositoryRoot', $mx)
+    Assert ($before -eq 0 -and (G $mx @('status', '--porcelain')).Count -eq 0) 'M6 the locator is read-only (no file is fixed, synced or written)'
+    $src = Get-Content -Raw (Join-Path $toolDir $M)
+    Assert ($src -notmatch "(?i)'(commit|push|add)'|Set-Content|Add-Content|Out-File|WriteAll|Copy-Item|Move-Item|Remove-Item") 'M6 the locator has no write, sync, commit or push path'
+
+    # =====================================================================
+    # W. Workflow structure (OSS-M4-2): real .github/workflows files
+    # =====================================================================
+    $baselineCommit = 'd3648a3f5f9b58fb8e28a6b8ce9770406055a67a'
+    $ciText = [IO.File]::ReadAllText((Join-Path $RepositoryRoot '.github/workflows/ci.yml'))
+    $steps = @(Get-OwWorkflowSteps $RepositoryRoot)
+    Assert ($steps.Count -eq ([regex]::Matches($ciText, '(?m)^\s+- name:')).Count -and $ciText -notmatch "`t") 'W1 ci.yml: every step is parsed and no tab characters are used'
+    Assert (@($steps | Where-Object { [bool]$_.run -eq [bool]$_.uses }).Count -eq 0) 'W1 ci.yml: every step has exactly one of run or uses'
+    Assert (@($steps | Where-Object { $_.uses -and $_.uses -notmatch '@[0-9a-f]{40}(\s|$)' }).Count -eq 0) 'W1 ci.yml: every action is pinned to a full commit SHA'
+    Assert (@($steps | Where-Object { $_.run -and $_.run.Contains('${{') }).Count -eq 0) 'W1 ci.yml: no step interpolates a GitHub expression into a run script'
+    $baseYml = (G $RepositoryRoot @('show', "${baselineCommit}:.github/workflows/ci.yml")) -join "`n"
+    $baseDir = Join-Path $temp 'baseline-ci'
+    $null = New-Item -ItemType Directory -Force -Path (Join-Path $baseDir '.github/workflows')
+    [IO.File]::WriteAllText((Join-Path $baseDir '.github/workflows/ci.yml'), $baseYml + "`n")
+    $baseSteps = @(Get-OwWorkflowSteps $baseDir)
+    $prefixOk = $baseSteps.Count -gt 0 -and $steps.Count -ge $baseSteps.Count
+    for ($i = 0; $prefixOk -and $i -lt $baseSteps.Count; $i++) {
+        foreach ($k in @('name', 'run', 'uses', 'shell', 'condition')) { if ([string]$steps[$i].$k -cne [string]$baseSteps[$i].$k) { $prefixOk = $false } }
+    }
+    Assert $prefixOk "W2 all $($baseSteps.Count) steps defined at $($baselineCommit.Substring(0, 7)) are an unchanged, in-order prefix of ci.yml"
+    $headerNow = ($ciText.Replace("`r`n", "`n") -split "`n      - name:")[0]
+    $headerBase = ($baseYml.Replace("`r`n", "`n") -split "`n      - name:")[0]
+    Assert ($headerNow -ceq $headerBase) 'W2 triggers, permissions, concurrency, job name, runner and timeout are unchanged'
+    $added = @($steps | Select-Object -Skip $baseSteps.Count | ForEach-Object { $_.name })
+    Assert (($added -join '|') -ceq 'Run commit identity privacy validation|Run model candidate intake validation|Run OSS workflow tools regression') "W2 exactly the three OSS-M4-2 steps are appended ($($added.Count))"
+    Assert ($ciText.Contains('./tools/oss-workflow/Test-CommitIdentityPrivacy.ps1 -RepositoryRoot $PWD -CommitRangeFromGitHubEvent') -and $ciText -notmatch '(?m)^\s+continue-on-error\s*:') 'W2 the identity step uses the explicit commit-range mode and no step sets continue-on-error'
+    $mdPath = Join-Path $RepositoryRoot '.github/workflows/mirror-drift.yml'
+    $md = [IO.File]::ReadAllText($mdPath)
+    $mdDir = Join-Path $temp 'mirror-wf'
+    $null = New-Item -ItemType Directory -Force -Path (Join-Path $mdDir '.github/workflows')
+    Copy-Item $mdPath (Join-Path $mdDir '.github/workflows/ci.yml')
+    $mdSteps = @(Get-OwWorkflowSteps $mdDir)
+    $mdOn = ([regex]::Match($md.Replace("`r`n", "`n"), '(?ms)^on:\n(.*?)\n\S')).Groups[1].Value
+    Assert ($mdOn -match '(?m)^  schedule:' -and $mdOn -match '(?m)^  workflow_dispatch:' -and $mdOn -notmatch '(?m)^  (push|pull_request)') 'W3 mirror-drift runs weekly and on manual dispatch only'
+    Assert ($md -match '(?m)^permissions:\n?\s+contents: read\s*$' -and $md -notmatch '(?i):\s*write\b' -and $md -notmatch 'secrets\.') 'W3 mirror-drift is read-only (contents: read, no write permission, no secrets)'
+    $ciCheckout = @($steps | Where-Object { $_.uses -like 'actions/checkout@*' })[0].uses
+    Assert (@($mdSteps | Where-Object { $_.uses }).Count -eq 1 -and @($mdSteps | Where-Object { $_.uses })[0].uses -ceq $ciCheckout -and $md -match 'persist-credentials: false') 'W3 mirror-drift uses the same pinned checkout without persisted credentials'
+    $mdRuns = @($mdSteps | Where-Object { $_.run } | ForEach-Object { $_.run })
+    Assert (($mdRuns -join '|') -ceq './tools/oss-workflow/Test-MirrorParity.ps1 -RepositoryRoot $PWD|./tests/validate-stealth-registry.ps1 -RepositoryRoot $PWD|./tests/validate-health-check.ps1 -RepositoryRoot $PWD|./tests/validate-profile-v2.ps1 -RepositoryRoot $PWD') 'W3 mirror-drift runs only the locator and the three existing parity validators'
+    Assert ($md -notmatch '(?i)git\s+(push|commit)|gh\s|curl|Invoke-WebRequest' -and $md -match 'timeout-minutes:') 'W3 mirror-drift never pushes, commits or calls external services, and has a timeout'
 }
 catch {
     Fail ("unexpected error: " + (ConvertTo-OwSafeText $_.Exception.Message $temp) + ' @ ' + $_.InvocationInfo.ScriptLineNumber)
