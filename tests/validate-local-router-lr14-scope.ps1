@@ -1010,6 +1010,82 @@ $script:RegisteredSlices = @(
             "tests/validate-repo.ps1" = "dotnet resolves the pinned .NET SDK"
         }
     }
+    # OSS-M4-1-WORKFLOW-TOOLS: developer tools under tools/oss-workflow (tiered verification, receipts,
+    # LR-14 registration candidates, identity privacy gate, evidence report) with their tests.
+    # Tools only; no product, CI workflow, gate logic, registration, analyzer or Git config change.
+    [pscustomobject]@{
+        Name      = "OSS-M4-1-WORKFLOW-TOOLS"
+        Base      = "c192c68069e8a8539c6fdbd4241e951dc4d34147"
+        Tip       = "8902b9e700386c387a60b5c999b7df69aa0202f4"
+        Artifacts = @(
+            "tools/oss-workflow/approved-identities.json",
+            "tools/oss-workflow/Invoke-TieredVerification.ps1",
+            "tools/oss-workflow/New-EvidenceReport.ps1",
+            "tools/oss-workflow/New-Lr14RegistrationCandidate.ps1",
+            "tools/oss-workflow/OssWorkflow.psm1",
+            "tools/oss-workflow/README.md",
+            "tools/oss-workflow/Test-CommitIdentityPrivacy.ps1",
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1")
+        Markers   = @{
+            "tools/oss-workflow/approved-identities.json" = "oss-workflow.approved-identities/v1"
+            "tools/oss-workflow/Invoke-TieredVerification.ps1" = "Tiered local verification (L1-L4) with machine-readable receipts."
+            "tools/oss-workflow/New-EvidenceReport.ps1" = "Builds a concise acceptance-evidence report (Markdown) from real Git state,"
+            "tools/oss-workflow/New-Lr14RegistrationCandidate.ps1" = "Produces a CANDIDATE LR-14 slice registration for human review."
+            "tools/oss-workflow/OssWorkflow.psm1" = "function Test-OwRegistrationOnlyChange"
+            "tools/oss-workflow/README.md" = "# OSS workflow tools"
+            "tools/oss-workflow/Test-CommitIdentityPrivacy.ps1" = "Read-only pre-push privacy gate for commit identities."
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "OSS workflow tools validation PASSED"
+        }
+    }
+    # OSS-M4-1-RECEIPT-FAIL-LINES: receipts record explicit FAIL lines before diagnostic noise. Tools only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-1-RECEIPT-FAIL-LINES"
+        Base      = "52af5882e9a6beb6cb43c0b17616751dc413dfd9"
+        Tip       = "fc828460a59ab915453034a2df7ab6ae4483052e"
+        Artifacts = @(
+            "tools/oss-workflow/Invoke-TieredVerification.ps1",
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1")
+        Markers   = @{
+            "tools/oss-workflow/Invoke-TieredVerification.ps1" = "# Failure evidence: explicit FAIL lines first, then other error lines."
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "R8 the receipt records the explicit FAIL line before diagnostic noise"
+        }
+    }
+    # OSS-M4-1-FIX1-REUSE-COVERAGE: receipt reuse re-checks identity live, level coverage, strict LR-14
+    # append detection for the workflow tools. Tools only; no CI, gate logic or registration change.
+    [pscustomobject]@{
+        Name      = "OSS-M4-1-FIX1-REUSE-COVERAGE"
+        Base      = "9605439ed770be42719d3f522742c8c1f5dd0680"
+        Tip       = "8d5cf0608d11ac35e954fa3c4fd867904f3db1c2"
+        Artifacts = @(
+            "tools/oss-workflow/Invoke-TieredVerification.ps1",
+            "tools/oss-workflow/OssWorkflow.psm1",
+            "tools/oss-workflow/README.md",
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1")
+        Markers   = @{
+            "tools/oss-workflow/Invoke-TieredVerification.ps1" = "# Identity privacy is always re-checked live; it is never taken from an old receipt."
+            "tools/oss-workflow/OssWorkflow.psm1" = "function Test-OwStaticRegistrationStatement"
+            "tools/oss-workflow/README.md" = "the identity privacy check is always re-run live"
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "U2 after the local identity changes, -ReuseReceipt fails"
+        }
+    }
+    # OSS-M4-1-FIX2-L1-ONLY-REUSE: receipt reuse limited to L1 static checks, history kept, base/merge-base/tool
+    # in the drift check for the workflow tools. Tools only; no CI, gate logic or registration change.
+    [pscustomobject]@{
+        Name      = "OSS-M4-1-FIX2-L1-ONLY-REUSE"
+        Base      = "2a43101fe6596b13525d3673e89b6a71ffb75dd4"
+        Tip       = "789405a795c57e96fb805661342da67caa65c992"
+        Artifacts = @(
+            "tools/oss-workflow/Invoke-TieredVerification.ps1",
+            "tools/oss-workflow/New-EvidenceReport.ps1",
+            "tools/oss-workflow/README.md",
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1")
+        Markers   = @{
+            "tools/oss-workflow/Invoke-TieredVerification.ps1" = "# Runtime checks (L2/L3/L4) are always executed again. An identical earlier"
+            "tools/oss-workflow/New-EvidenceReport.ps1" = "历史记录：存在相同的 {0} PASS 收据"
+            "tools/oss-workflow/README.md" = "**Reuse applies to L1 static checks only.**"
+            "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "N1 L2 with -ReuseReceipt executes every runtime check again"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
