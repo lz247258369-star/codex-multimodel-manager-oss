@@ -1,0 +1,49 @@
+name: Weekly Mirror Drift
+
+# Read-only weekly check of the installer/Skill copies that the repository
+# already declares as mirrors (tests/validate-stealth-registry.ps1,
+# tests/validate-health-check.ps1, tests/validate-profile-v2.ps1). It never
+# fixes, syncs, commits or pushes anything.
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mirror-drift:
+    name: mirror-drift
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        # Same pinned commit of the reviewed v4 tag as the Development Gate.
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Locate mirror differences
+        shell: pwsh
+        run: ./tools/oss-workflow/Test-MirrorParity.ps1 -RepositoryRoot $PWD
+
+      - name: Run stealth registry parity validation
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: ./tests/validate-stealth-registry.ps1 -RepositoryRoot $PWD
+
+      - name: Run health-check parity validation
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: ./tests/validate-health-check.ps1 -RepositoryRoot $PWD
+
+      - name: Run profile-v2 parity validation
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: ./tests/validate-profile-v2.ps1 -RepositoryRoot $PWD

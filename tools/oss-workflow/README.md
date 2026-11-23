@@ -11,6 +11,7 @@ repository root (set `DOTNET_ROOT`/`PATH` if your .NET SDK is not on `PATH`).
 | `Test-CommitIdentityPrivacy.ps1` | Read-only pre-push gate for commit and local Git identities. |
 | `New-Lr14RegistrationCandidate.ps1` | Proposes LR-14 registration data for review. It never registers or approves. |
 | `New-EvidenceReport.ps1` | Builds an acceptance-evidence report from Git, receipts and live gate runs. |
+| `Test-MirrorParity.ps1` | Read-only locator of drift between the installer/Skill copies the existing parity validators declare as mirrors. |
 | `tests/Test-OssWorkflowTools.ps1` | Automated tests for all of the above. |
 
 ## Verification levels
@@ -74,6 +75,32 @@ pwsh tools/oss-workflow/Test-CommitIdentityPrivacy.ps1     # exit 0 required
 Only the identities in `approved-identities.json` are accepted. Output shows
 labels, never names or addresses. The existing manual privacy review stays in
 place; a CI check after a push cannot undo a leak, so this runs before pushing.
+
+### In CI (Development Gate)
+
+The Development Gate runs the same gate in commit-range mode:
+`Test-CommitIdentityPrivacy.ps1 -CommitRangeFromGitHubEvent`. The range comes
+from the GitHub event file: `pull_request` uses the pull request's real
+`base.sha..head.sha` (never the synthetic merge commit GitHub checks out),
+`push` uses `before..after` (`after` must be the checked-out HEAD), and
+`workflow_dispatch`/`schedule` use the commits introduced by HEAD. A missing
+event, an all-zero `before`, a commit missing from the checkout, an empty range
+or an unsupported event is BLOCKED, never PASS. This mode checks commit
+history only: the local Git identity is not evaluated and is reported as not
+checked, so the local pre-push gate above stays required. The mode is enabled
+only by the explicit switch, never by environment variables.
+
+## Mirror drift
+
+```powershell
+pwsh tools/oss-workflow/Test-MirrorParity.ps1
+```
+
+The pairs and their rules are read from `tests/validate-stealth-registry.ps1`,
+`tests/validate-health-check.ps1` and `tests/validate-profile-v2.ps1`; nothing
+is declared twice. The weekly workflow `.github/workflows/mirror-drift.yml`
+(also `workflow_dispatch`) runs the locator and the three validators read-only;
+it never fixes, syncs, commits or pushes.
 
 ## LR-14 registration candidate
 

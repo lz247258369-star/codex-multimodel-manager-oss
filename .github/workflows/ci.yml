@@ -355,3 +355,19 @@ jobs:
       - name: Run experimental Codex Desktop provider-route validation
         shell: pwsh
         run: ./tests/validate-desktop-chat-provider.ps1 -RepositoryRoot $PWD
+
+      # OSS-M4-2: additive steps; every step above is unchanged.
+      # Commit identities of exactly the commits this event introduces
+      # (pull_request: base.sha..head.sha, never the synthetic merge commit;
+      # push: before..after). The local pre-push gate stays required.
+      - name: Run commit identity privacy validation
+        shell: pwsh
+        run: ./tools/oss-workflow/Test-CommitIdentityPrivacy.ps1 -RepositoryRoot $PWD -CommitRangeFromGitHubEvent
+
+      - name: Run model candidate intake validation
+        shell: pwsh
+        run: ./tests/validate-model-candidate-intake.ps1 -RepositoryRoot $PWD
+
+      - name: Run OSS workflow tools regression
+        shell: pwsh
+        run: ./tools/oss-workflow/tests/Test-OssWorkflowTools.ps1 -RepositoryRoot $PWD
