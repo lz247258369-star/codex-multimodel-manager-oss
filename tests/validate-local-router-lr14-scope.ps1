@@ -1145,6 +1145,18 @@ $script:RegisteredSlices = @(
             "local-router/tests/Router.Core.Tests/Host/PinnedTestClock.cs" = "internal sealed class PinnedTestClock : Router.Core.Abstractions.IClock"
         }
     }
+    # OSS-M4-2-HOTFIX1-FRESHNESS-BOUNDARY: a CostEstimator theory pins the 90-day price freshness
+    # boundary (-1 day, -1 tick, exactly 90 days, +1 tick, +1 day). Test code only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX1-FRESHNESS-BOUNDARY"
+        Base      = "af0ad76ae9576b6ba2972cd240389fd493d946b3"
+        Tip       = "c20c7ed9e860df601fdc488f702ea58e9f8955cc"
+        Artifacts = @(
+            "local-router/tests/Router.Metering.Tests/MeteringTests.cs")
+        Markers   = @{
+            "local-router/tests/Router.Metering.Tests/MeteringTests.cs" = "public void Price_freshness_boundary_is_exactly_the_default_stale_window(long offsetTicks, CostEstimateStatus expected)"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
