@@ -1157,6 +1157,26 @@ $script:RegisteredSlices = @(
             "local-router/tests/Router.Metering.Tests/MeteringTests.cs" = "public void Price_freshness_boundary_is_exactly_the_default_stale_window(long offsetTicks, CostEstimateStatus expected)"
         }
     }
+    # OSS-M4-2-HOTFIX1-FIX1-HOST-CLEANUP: Host test cleanup reports stop timeouts and Host faults, keeps
+    # the sandbox while the Host may still run, and preserves the original test failure. Test code only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX1-FIX1-HOST-CLEANUP"
+        Base      = "2ba882e9f2f2e8d59d6a8bdc578496f276b45b11"
+        Tip       = "def35698bc7ca60f72ef166666ab583c2ebb8873"
+        Artifacts = @(
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanup.cs",
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanupTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/HostTestHarness.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10DefaultPricingHostTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs")
+        Markers   = @{
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanup.cs" = "public static async Task FinishHostTestAsync("
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanupTests.cs" = "public async Task Host_that_does_not_end_keeps_its_sandbox_and_reports_the_stop_timeout()"
+            "local-router/tests/Router.Core.Tests/Host/HostTestHarness.cs" = "public static void AssertPriceFreshAt(PricingSnapshot pricing, string providerId, string modelId, DateTimeOffset now)"
+            "local-router/tests/Router.Core.Tests/Host/Lr10DefaultPricingHostTests.cs" = "using System.Runtime.ExceptionServices;"
+            "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs" = "await HostTestCleanup.FinishHostTestAsync(failure, cts, runTask, sandbox);"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
