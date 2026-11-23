@@ -1125,6 +1125,26 @@ $script:RegisteredSlices = @(
             "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "# below is built and edited with LF, so the here-strings are normalised first."
         }
     }
+    # OSS-M4-2-HOTFIX1-PRICING-CLOCK: the canonical-pricing Host tests run on the shared pinned test
+    # clock and stop the Host in finally before deleting the sandbox. Test code only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX1-PRICING-CLOCK"
+        Base      = "8ec8ce9308f1522b3c942650475aa56e1d3ee3ee"
+        Tip       = "5165cfbc34cc46340e373e627cab43ca4eddcf0c"
+        Artifacts = @(
+            "local-router/tests/Router.Core.Tests/Host/HostTestHarness.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10DefaultPricingHostTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10ProductionMeteringHostTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/PinnedTestClock.cs")
+        Markers   = @{
+            "local-router/tests/Router.Core.Tests/Host/HostTestHarness.cs" = "public static async Task StopHostAsync(CancellationTokenSource cts, Task<int>? runTask)"
+            "local-router/tests/Router.Core.Tests/Host/Lr10DefaultPricingHostTests.cs" = "clock: new PinnedTestClock(HostTestHarness.CanonicalPricingNow),"
+            "local-router/tests/Router.Core.Tests/Host/Lr10ProductionMeteringHostTests.cs" = "clock: new PinnedTestClock(PinnedNow),"
+            "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs" = "await HostTestHarness.StopHostAsync(cts, runTask);"
+            "local-router/tests/Router.Core.Tests/Host/PinnedTestClock.cs" = "internal sealed class PinnedTestClock : Router.Core.Abstractions.IClock"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
