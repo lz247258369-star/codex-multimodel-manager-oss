@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using Router.ClientAdapters.Responses;
 using Router.Core.Tests.Fakes;
@@ -20,6 +21,7 @@ public sealed class Lr10ShutdownDrainRaceTests
         string sandbox = TestPaths.NewSandboxDirectory();
         using CancellationTokenSource cts = new();
         Task<int>? runTask = null;
+        ExceptionDispatchInfo? failure = null;
         try
         {
             TestPathProvider pathProvider = new(sandbox);
@@ -77,11 +79,14 @@ public sealed class Lr10ShutdownDrainRaceTests
                 await HostTestHarness.WaitForLogFileAsync(logDirectory, TimeSpan.FromSeconds(2)),
                 "Redacted request log was not drained before host exit.");
         }
-        finally
+        catch (Exception error)
         {
-            await HostTestHarness.StopHostAsync(cts, runTask);
-            Directory.Delete(sandbox, recursive: true);
+            // Captured, never swallowed: FinishHostTestAsync rethrows it as the
+            // first reported failure after the Host is stopped.
+            failure = ExceptionDispatchInfo.Capture(error);
         }
+
+        await HostTestCleanup.FinishHostTestAsync(failure, cts, runTask, sandbox);
     }
 
     private static FakeResponsesService PricedService()

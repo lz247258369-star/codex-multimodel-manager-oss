@@ -197,41 +197,6 @@ internal static class HostTestHarness
             + $"{providerId}/{modelId} price dated {price.EffectiveAt:O}; update the test pin to match the catalog.");
     }
 
-    /// <summary>
-    /// Stops a Host started by a test and waits for it to exit. Safe to call
-    /// from a finally block on every path: it cancels at most once, never
-    /// throws, and returns immediately when the Host already exited, so a
-    /// failed assertion still releases the listener and sandbox files and the
-    /// original failure is the one reported.
-    /// </summary>
-    public static async Task StopHostAsync(CancellationTokenSource cts, Task<int>? runTask)
-    {
-        try
-        {
-            if (!cts.IsCancellationRequested)
-            {
-                cts.Cancel();
-            }
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-
-        if (runTask is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await runTask.WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            // The Host outcome is asserted by the test body; cleanup only waits.
-        }
-    }
-
     /// <summary>Repository root derived from the test output directory layout.</summary>
     public static string RepositoryRoot
         => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", ".."));

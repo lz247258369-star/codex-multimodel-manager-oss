@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using Router.ClientAdapters.Responses;
 using Router.Core.Tests.Fakes;
@@ -20,6 +21,7 @@ public sealed class Lr10DefaultPricingHostTests
         string sandbox = TestPaths.NewSandboxDirectory();
         using CancellationTokenSource cts = new();
         Task<int>? runTask = null;
+        ExceptionDispatchInfo? failure = null;
         try
         {
             TestPathProvider pathProvider = new(sandbox);
@@ -87,11 +89,14 @@ public sealed class Lr10DefaultPricingHostTests
             Assert.True(probe.Observer!.DrainCompleted, "Bounded completion queue must drain before host exit.");
             Assert.Single(probe.Metering.Store.Recent(20));
         }
-        finally
+        catch (Exception error)
         {
-            await HostTestHarness.StopHostAsync(cts, runTask);
-            Directory.Delete(sandbox, recursive: true);
+            // Captured, never swallowed: FinishHostTestAsync rethrows it as the
+            // first reported failure after the Host is stopped.
+            failure = ExceptionDispatchInfo.Capture(error);
         }
+
+        await HostTestCleanup.FinishHostTestAsync(failure, cts, runTask, sandbox);
     }
 
     [Fact]
@@ -101,6 +106,7 @@ public sealed class Lr10DefaultPricingHostTests
         string sandbox = TestPaths.NewSandboxDirectory();
         using CancellationTokenSource cts = new();
         Task<int>? runTask = null;
+        ExceptionDispatchInfo? failure = null;
         try
         {
             TestPathProvider pathProvider = new(sandbox);
@@ -139,11 +145,14 @@ public sealed class Lr10DefaultPricingHostTests
             int exitCode = await runTask.WaitAsync(TimeSpan.FromSeconds(15));
             Assert.Equal(0, exitCode);
         }
-        finally
+        catch (Exception error)
         {
-            await HostTestHarness.StopHostAsync(cts, runTask);
-            Directory.Delete(sandbox, recursive: true);
+            // Captured, never swallowed: FinishHostTestAsync rethrows it as the
+            // first reported failure after the Host is stopped.
+            failure = ExceptionDispatchInfo.Capture(error);
         }
+
+        await HostTestCleanup.FinishHostTestAsync(failure, cts, runTask, sandbox);
     }
 
     private static FakeResponsesService CanonicalPricedService(CanonicalUsage usage)
