@@ -1177,6 +1177,26 @@ $script:RegisteredSlices = @(
             "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs" = "await HostTestCleanup.FinishHostTestAsync(failure, cts, runTask, sandbox);"
         }
     }
+    # OSS-M4-2-HOTFIX1-PRICING-CLOCK-REAUTH: re-authorizes the unchanged 8ec8ce9..5165cfb range with markers
+    # that still exist after OSS-M4-2-HOTFIX1-FIX1 replaced StopHostAsync (two earlier markers quoted it). Test code only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX1-PRICING-CLOCK-REAUTH"
+        Base      = "8ec8ce9308f1522b3c942650475aa56e1d3ee3ee"
+        Tip       = "5165cfbc34cc46340e373e627cab43ca4eddcf0c"
+        Artifacts = @(
+            "local-router/tests/Router.Core.Tests/Host/HostTestHarness.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10DefaultPricingHostTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10ProductionMeteringHostTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/PinnedTestClock.cs")
+        Markers   = @{
+            "local-router/tests/Router.Core.Tests/Host/HostTestHarness.cs" = "public static readonly DateTimeOffset CanonicalPricingNow = new(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);"
+            "local-router/tests/Router.Core.Tests/Host/Lr10DefaultPricingHostTests.cs" = "clock: new PinnedTestClock(HostTestHarness.CanonicalPricingNow),"
+            "local-router/tests/Router.Core.Tests/Host/Lr10ProductionMeteringHostTests.cs" = "clock: new PinnedTestClock(PinnedNow),"
+            "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs" = "clock: new PinnedTestClock(HostTestHarness.CanonicalPricingNow),"
+            "local-router/tests/Router.Core.Tests/Host/PinnedTestClock.cs" = "internal sealed class PinnedTestClock : Router.Core.Abstractions.IClock"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
