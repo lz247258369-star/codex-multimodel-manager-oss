@@ -18,6 +18,8 @@ public sealed class Lr10DefaultPricingHostTests
     {
         int port = HostTestHarness.GetFreePort();
         string sandbox = TestPaths.NewSandboxDirectory();
+        using CancellationTokenSource cts = new();
+        Task<int>? runTask = null;
         try
         {
             TestPathProvider pathProvider = new(sandbox);
@@ -32,10 +34,10 @@ public sealed class Lr10DefaultPricingHostTests
                 });
             HostObservabilityProbe probe = new();
 
-            using CancellationTokenSource cts = new();
-            Task<int> runTask = RouterHostBootstrap.RunAsync(
+            runTask = RouterHostBootstrap.RunAsync(
                 Array.Empty<string>(),
                 pathProvider,
+                clock: new PinnedTestClock(HostTestHarness.CanonicalPricingNow),
                 secretResolver: HostTestHarness.SecretResolver(),
                 responsesService: service,
                 observabilityProbe: probe,
@@ -49,6 +51,8 @@ public sealed class Lr10DefaultPricingHostTests
             Assert.NotNull(probe.Metering);
             Assert.NotNull(probe.Observer);
             Assert.NotNull(probe.Metering!.Pricing);
+            HostTestHarness.AssertPriceFreshAt(
+                probe.Metering.Pricing!, "chatgpt", "gpt-5.6-terra", HostTestHarness.CanonicalPricingNow);
 
             using HttpResponseMessage response = await PostAsync(client, port, "gpt-5.6-terra");
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -85,6 +89,7 @@ public sealed class Lr10DefaultPricingHostTests
         }
         finally
         {
+            await HostTestHarness.StopHostAsync(cts, runTask);
             Directory.Delete(sandbox, recursive: true);
         }
     }
@@ -94,14 +99,15 @@ public sealed class Lr10DefaultPricingHostTests
     {
         int port = HostTestHarness.GetFreePort();
         string sandbox = TestPaths.NewSandboxDirectory();
+        using CancellationTokenSource cts = new();
+        Task<int>? runTask = null;
         try
         {
             TestPathProvider pathProvider = new(sandbox);
             await HostTestHarness.WriteEnabledRouterDefaultsAsync(pathProvider, port);
 
             HostObservabilityProbe probe = new();
-            using CancellationTokenSource cts = new();
-            Task<int> runTask = RouterHostBootstrap.RunAsync(
+            runTask = RouterHostBootstrap.RunAsync(
                 Array.Empty<string>(),
                 pathProvider,
                 secretResolver: HostTestHarness.SecretResolver(),
@@ -135,6 +141,7 @@ public sealed class Lr10DefaultPricingHostTests
         }
         finally
         {
+            await HostTestHarness.StopHostAsync(cts, runTask);
             Directory.Delete(sandbox, recursive: true);
         }
     }
@@ -147,7 +154,7 @@ public sealed class Lr10DefaultPricingHostTests
             {
                 Id = "resp_canonical_pricing",
                 ObjectType = "response",
-                CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                CreatedAt = HostTestHarness.CanonicalPricingNow.ToUnixTimeSeconds(),
                 Status = "completed",
                 Model = request.Model,
                 Usage = usage,

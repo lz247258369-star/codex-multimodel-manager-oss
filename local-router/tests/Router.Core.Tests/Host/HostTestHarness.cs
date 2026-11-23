@@ -172,6 +172,66 @@ internal static class HostTestHarness
         return false;
     }
 
+    /// <summary>
+    /// Test instant for Hosts that load the canonical installer/model-catalog.json
+    /// prices (dated 2026-08-25). Production treats a price as stale
+    /// <see cref="CostEstimator.DefaultStaleAfter"/> after that date, so these
+    /// Hosts run on a <see cref="PinnedTestClock"/> inside the window instead of
+    /// the wall clock. The production rule and the catalog are unchanged.
+    /// </summary>
+    public static readonly DateTimeOffset CanonicalPricingNow = new(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// Fails with a clear message when <paramref name="now"/> is outside the
+    /// freshness window of the loaded price, so a re-dated catalog shows up as
+    /// a stale test pin instead of an unexplained StalePrice estimate.
+    /// </summary>
+    public static void AssertPriceFreshAt(PricingSnapshot pricing, string providerId, string modelId, DateTimeOffset now)
+    {
+        ModelPricing? price = pricing.TryGet(providerId, modelId);
+        Assert.NotNull(price);
+        Assert.NotNull(price!.EffectiveAt);
+        Assert.True(
+            now <= price.EffectiveAt!.Value + CostEstimator.DefaultStaleAfter,
+            $"Test clock {now:O} is outside the {CostEstimator.DefaultStaleAfter.TotalDays}-day freshness window of the "
+            + $"{providerId}/{modelId} price dated {price.EffectiveAt:O}; update the test pin to match the catalog.");
+    }
+
+    /// <summary>
+    /// Stops a Host started by a test and waits for it to exit. Safe to call
+    /// from a finally block on every path: it cancels at most once, never
+    /// throws, and returns immediately when the Host already exited, so a
+    /// failed assertion still releases the listener and sandbox files and the
+    /// original failure is the one reported.
+    /// </summary>
+    public static async Task StopHostAsync(CancellationTokenSource cts, Task<int>? runTask)
+    {
+        try
+        {
+            if (!cts.IsCancellationRequested)
+            {
+                cts.Cancel();
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        if (runTask is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await runTask.WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // The Host outcome is asserted by the test body; cleanup only waits.
+        }
+    }
+
     /// <summary>Repository root derived from the test output directory layout.</summary>
     public static string RepositoryRoot
         => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", ".."));
