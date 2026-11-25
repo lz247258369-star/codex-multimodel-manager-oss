@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using Router.Host;
 
 namespace Router.Core.Tests.Host;
 
@@ -8,10 +9,20 @@ internal enum HostStopOutcome
     /// <summary>The test never started a Host.</summary>
     NotStarted,
 
-    /// <summary>The Host returned an exit code (the test body asserts its value).</summary>
+    /// <summary>The Host returned exit code 0.</summary>
     Exited,
 
-    /// <summary>The Host task ended by the cancellation the test requested.</summary>
+    /// <summary>
+    /// The Host returned a non-zero exit code other than the cancellation code.
+    /// RunAsync reports real failures this way (for example a failed shutdown
+    /// cleanup), so this is never a clean stop.
+    /// </summary>
+    ExitedWithError,
+
+    /// <summary>
+    /// The Host ended by the cancellation the test requested: the cancellation
+    /// exit code, or a cancelled task carrying exactly the test's own token.
+    /// </summary>
     Cancelled,
 
     /// <summary>The Host did not end within the stop timeout; it may still be running.</summary>
@@ -22,7 +33,11 @@ internal enum HostStopOutcome
 }
 
 /// <summary>Result of <see cref="HostTestCleanup.StopHostAsync"/>.</summary>
-internal sealed record HostStopResult(HostStopOutcome Outcome, int? ExitCode = null, Exception? Fault = null)
+internal sealed record HostStopResult(
+    HostStopOutcome Outcome,
+    int? ExitCode = null,
+    Exception? Fault = null,
+    Exception? StopRequestFailure = null)
 {
     /// <summary>
     /// True only when the Host is known to have ended, so its listener, state
@@ -60,38 +75,62 @@ internal static class HostTestCleanup
         TimeSpan? stopTimeout = null)
     {
         ArgumentNullException.ThrowIfNull(cts);
+        Exception? stopRequestFailure = null;
         if (!cts.IsCancellationRequested)
         {
-            cts.Cancel();
+            try
+            {
+                cts.Cancel();
+            }
+            catch (Exception error)
+            {
+                // Recorded, never swallowed: a throwing cancellation callback
+                // must not replace the original test failure or skip the wait.
+                stopRequestFailure = error;
+            }
         }
 
+        HostStopResult result = await ObserveHostEndAsync(cts, runTask, stopTimeout ?? DefaultStopTimeout).ConfigureAwait(false);
+        return result with { StopRequestFailure = stopRequestFailure };
+    }
+
+    private static async Task<HostStopResult> ObserveHostEndAsync(
+        CancellationTokenSource cts,
+        Task<int>? runTask,
+        TimeSpan stopTimeout)
+    {
         if (runTask is null)
         {
             return new HostStopResult(HostStopOutcome.NotStarted);
         }
 
-        Task finished = await Task.WhenAny(runTask, Task.Delay(stopTimeout ?? DefaultStopTimeout)).ConfigureAwait(false);
+        Task finished = await Task.WhenAny(runTask, Task.Delay(stopTimeout)).ConfigureAwait(false);
         if (!ReferenceEquals(finished, runTask))
         {
             return new HostStopResult(HostStopOutcome.TimedOut);
         }
 
-        if (runTask.IsCompletedSuccessfully)
+        try
         {
-            return new HostStopResult(HostStopOutcome.Exited, ExitCode: runTask.Result);
+            int exitCode = await runTask.ConfigureAwait(false);
+            HostStopOutcome outcome = exitCode switch
+            {
+                0 => HostStopOutcome.Exited,
+                RouterHostBootstrap.CancelledExitCode => HostStopOutcome.Cancelled,
+                _ => HostStopOutcome.ExitedWithError,
+            };
+            return new HostStopResult(outcome, ExitCode: exitCode);
         }
-
-        if (runTask.IsCanceled)
+        catch (OperationCanceledException cancelled) when (cancelled.CancellationToken == cts.Token)
         {
             return new HostStopResult(HostStopOutcome.Cancelled);
         }
-
-        Exception fault = runTask.Exception!.InnerExceptions.Count == 1
-            ? runTask.Exception.InnerExceptions[0]
-            : runTask.Exception;
-        return fault is OperationCanceledException
-            ? new HostStopResult(HostStopOutcome.Cancelled)
-            : new HostStopResult(HostStopOutcome.Faulted, Fault: fault);
+        catch (Exception fault)
+        {
+            // Includes a cancellation that is not the test's own (for example an
+            // HTTP timeout): only the requested stop is an expected cancellation.
+            return new HostStopResult(HostStopOutcome.Faulted, Fault: fault);
+        }
     }
 
     /// <summary>
@@ -113,17 +152,27 @@ internal static class HostTestCleanup
         HostStopResult stop = await StopHostAsync(cts, runTask, stopTimeout).ConfigureAwait(false);
         List<Exception> cleanupFailures = [];
 
+        if (stop.StopRequestFailure is not null)
+        {
+            cleanupFailures.Add(new HostCleanupException("Requesting the Host stop failed.", stop.StopRequestFailure));
+        }
+
+        if (stop.Outcome == HostStopOutcome.ExitedWithError)
+        {
+            cleanupFailures.Add(new HostCleanupException($"The Host ended with exit code {stop.ExitCode}."));
+        }
+
         if (stop.Outcome == HostStopOutcome.Faulted
             && !ReferenceEquals(stop.Fault, testFailure?.SourceException))
         {
-            cleanupFailures.Add(new HostCleanupException("The Host task faulted while the test was stopping it.", stop.Fault));
+            cleanupFailures.Add(new HostCleanupException("The Host task faulted.", stop.Fault));
         }
 
         if (!stop.HostEnded)
         {
             cleanupFailures.Add(new HostCleanupException(
                 $"The Host did not end within {(stopTimeout ?? DefaultStopTimeout).TotalSeconds:0.###} s after cancellation; "
-                + $"the sandbox '{sandbox}' was left in place because the Host may still be using it."));
+                + $"the sandbox '{Path.GetFileName(sandbox)}' was left in place because the Host may still be using it."));
         }
         else if (Directory.Exists(sandbox))
         {
@@ -131,10 +180,10 @@ internal static class HostTestCleanup
             {
                 Directory.Delete(sandbox, recursive: true);
             }
-            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            catch (Exception error)
             {
                 cleanupFailures.Add(new HostCleanupException(
-                    $"The Host ended ({stop.Outcome}) but the sandbox '{sandbox}' could not be deleted.", error));
+                    $"The Host ended ({stop.Outcome}) but the sandbox '{Path.GetFileName(sandbox)}' could not be deleted.", error));
             }
         }
 

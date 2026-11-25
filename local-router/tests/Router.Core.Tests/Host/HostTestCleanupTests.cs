@@ -1,5 +1,6 @@
 using System.Runtime.ExceptionServices;
 using Router.Core.Tests.Fakes;
+using Router.Host;
 using Xunit;
 
 namespace Router.Core.Tests.Host;
@@ -14,19 +15,116 @@ public sealed class HostTestCleanupTests
     private static readonly TimeSpan ShortStopTimeout = TimeSpan.FromMilliseconds(50);
 
     [Fact]
-    public async Task Exited_host_is_reported_with_its_exit_code_and_the_sandbox_is_deleted()
+    public async Task Exited_host_is_a_clean_stop_and_the_sandbox_is_deleted()
     {
         string sandbox = NewSandboxWithFile();
         using CancellationTokenSource cts = new();
 
-        HostStopResult stop = await HostTestCleanup.StopHostAsync(cts, Task.FromResult(3));
-        await HostTestCleanup.FinishHostTestAsync(null, cts, Task.FromResult(3), sandbox);
+        HostStopResult stop = await HostTestCleanup.StopHostAsync(cts, Task.FromResult(0));
+        await HostTestCleanup.FinishHostTestAsync(null, cts, Task.FromResult(0), sandbox);
 
         Assert.Equal(HostStopOutcome.Exited, stop.Outcome);
-        Assert.Equal(3, stop.ExitCode);
+        Assert.Equal(0, stop.ExitCode);
         Assert.True(stop.HostEnded);
         Assert.True(cts.IsCancellationRequested);
         Assert.False(Directory.Exists(sandbox));
+    }
+
+    [Theory]
+    [InlineData(RouterHostBootstrap.ConfigErrorExitCode)]
+    [InlineData(RouterHostBootstrap.CleanupFailedExitCode)]
+    [InlineData(RouterHostBootstrap.ControlChannelUnavailableExitCode)]
+    public async Task Non_zero_exit_code_is_reported_even_when_the_test_already_failed(int exitCode)
+    {
+        string sandbox = NewSandboxWithFile();
+        using CancellationTokenSource cts = new();
+        InvalidOperationException original = new("original assertion");
+
+        HostCleanupException alone = await Assert.ThrowsAsync<HostCleanupException>(
+            () => HostTestCleanup.FinishHostTestAsync(null, cts, Task.FromResult(exitCode), sandbox));
+        AggregateException both = await Assert.ThrowsAsync<AggregateException>(
+            () => HostTestCleanup.FinishHostTestAsync(Capture(original), cts, Task.FromResult(exitCode), sandbox));
+
+        Assert.Contains($"exit code {exitCode}", alone.Message, StringComparison.Ordinal);
+        Assert.Same(original, both.InnerExceptions[0]);
+        Assert.Contains($"exit code {exitCode}", both.InnerExceptions[1].Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(sandbox));
+    }
+
+    [Fact]
+    public async Task Cancellation_exit_code_is_an_expected_cancellation()
+    {
+        string sandbox = NewSandboxWithFile();
+        using CancellationTokenSource cts = new();
+        Task<int> host = Task.FromResult(RouterHostBootstrap.CancelledExitCode);
+
+        HostStopResult stop = await HostTestCleanup.StopHostAsync(cts, host);
+        await HostTestCleanup.FinishHostTestAsync(null, cts, host, sandbox);
+
+        Assert.Equal(HostStopOutcome.Cancelled, stop.Outcome);
+        Assert.False(Directory.Exists(sandbox));
+    }
+
+    [Fact]
+    public async Task Cancellation_that_is_not_the_requested_stop_is_a_fault()
+    {
+        using CancellationTokenSource cts = new();
+        using CancellationTokenSource unrelated = new();
+        unrelated.Cancel();
+
+        HostStopResult cancelledTask = await HostTestCleanup.StopHostAsync(cts, Task.FromCanceled<int>(unrelated.Token));
+        HostStopResult timeoutFault = await HostTestCleanup.StopHostAsync(
+            cts, Task.FromException<int>(new TaskCanceledException("synthetic HTTP timeout")));
+
+        Assert.Equal(HostStopOutcome.Faulted, cancelledTask.Outcome);
+        Assert.Equal(HostStopOutcome.Faulted, timeoutFault.Outcome);
+        Assert.IsType<TaskCanceledException>(timeoutFault.Fault);
+    }
+
+    [Fact]
+    public async Task Failing_stop_request_is_recorded_and_does_not_replace_the_original_failure()
+    {
+        string sandbox = NewSandboxWithFile();
+        using CancellationTokenSource cts = new();
+        InvalidOperationException callbackFault = new("synthetic cancellation callback fault");
+        using CancellationTokenRegistration registration = cts.Token.Register(() => throw callbackFault);
+        InvalidOperationException original = new("original assertion");
+
+        AggregateException error = await Assert.ThrowsAsync<AggregateException>(
+            () => HostTestCleanup.FinishHostTestAsync(Capture(original), cts, Task.FromResult(0), sandbox));
+
+        Assert.Equal(2, error.InnerExceptions.Count);
+        Assert.Same(original, error.InnerExceptions[0]);
+        AggregateException request = Assert.IsType<AggregateException>(error.InnerExceptions[1].InnerException);
+        Assert.Same(callbackFault, Assert.Single(request.InnerExceptions));
+        Assert.False(Directory.Exists(sandbox));
+    }
+
+    [Fact]
+    public async Task Sandbox_that_cannot_be_deleted_is_reported_after_the_original_failure()
+    {
+        // An open handle without delete sharing makes the delete fail on Windows.
+        Assert.True(OperatingSystem.IsWindows(), "These Host tests run on Windows.");
+        string sandbox = NewSandboxWithFile();
+        using CancellationTokenSource cts = new();
+        InvalidOperationException original = new("original assertion");
+        try
+        {
+            AggregateException error;
+            using (new FileStream(Path.Combine(sandbox, "in-use.txt"), FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                error = await Assert.ThrowsAsync<AggregateException>(
+                    () => HostTestCleanup.FinishHostTestAsync(Capture(original), cts, Task.FromResult(0), sandbox));
+            }
+
+            Assert.Same(original, error.InnerExceptions[0]);
+            Assert.Contains("could not be deleted", error.InnerExceptions[1].Message, StringComparison.Ordinal);
+            Assert.IsAssignableFrom<IOException>(error.InnerExceptions[1].InnerException);
+        }
+        finally
+        {
+            Directory.Delete(sandbox, recursive: true);
+        }
     }
 
     [Fact]
@@ -45,7 +143,7 @@ public sealed class HostTestCleanupTests
     }
 
     [Fact]
-    public async Task Host_that_throws_operation_canceled_after_the_requested_stop_is_cancelled_not_faulted()
+    public async Task Host_that_throws_operation_canceled_for_the_requested_stop_is_cancelled_not_faulted()
     {
         using CancellationTokenSource cts = new();
         Task<int> host = WaitForCancellationThenThrowAsync(cts.Token);
