@@ -1197,6 +1197,20 @@ $script:RegisteredSlices = @(
             "local-router/tests/Router.Core.Tests/Host/PinnedTestClock.cs" = "internal sealed class PinnedTestClock : Router.Core.Abstractions.IClock"
         }
     }
+    # OSS-M4-2-HOTFIX1-FIX1-STOP-OUTCOMES: non-zero exit codes, unrelated cancellations and failing stop requests
+    # are reported by the Host test cleanup without replacing the original failure. Test code only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX1-FIX1-STOP-OUTCOMES"
+        Base      = "e50a40d657cb9281e6307d693414ac0119644fd1"
+        Tip       = "6a1049a528125008f75e1623012bc36aaa4d56d2"
+        Artifacts = @(
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanup.cs",
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanupTests.cs")
+        Markers   = @{
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanup.cs" = "private static async Task<HostStopResult> ObserveHostEndAsync("
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanupTests.cs" = "public async Task Cancellation_that_is_not_the_requested_stop_is_a_fault()"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
