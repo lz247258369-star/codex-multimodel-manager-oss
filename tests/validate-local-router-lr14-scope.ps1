@@ -1211,6 +1211,29 @@ $script:RegisteredSlices = @(
             "local-router/tests/Router.Core.Tests/Host/HostTestCleanupTests.cs" = "public async Task Cancellation_that_is_not_the_requested_stop_is_a_fault()"
         }
     }
+    # OSS-M4-2-HOTFIX2-RUNTIME-STATE-REPLACE-RACE: the lifecycle controller reads runtime state through a stream
+    # sharing ReadWrite and Delete, and the atomic writer retries ReplaceFile at most 3 times (25/50/100 ms)
+    # only for an exact sharing violation; every other failure and an exhausted conflict fail as before.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX2-RUNTIME-STATE-REPLACE-RACE"
+        Base      = "4f289a962488c1a417d3c4ad087917104e0b6154"
+        Tip       = "b5e0f37f34fff25bd183ba699c78322eb19f82f7"
+        Artifacts = @(
+            "installer/scripts/router-lifecycle.ps1",
+            "local-router/src/Router.State/AtomicFileWriter.cs",
+            "local-router/tests/Router.Core.Tests/State/AtomicFileWriterSharingRetryTests.cs",
+            "local-router/tests/Router.Core.Tests/State/StatePersistenceDiagnosticTests.cs",
+            "tests/fixtures/local-router/startup-gate/StartupGateProbe.cs",
+            "tests/validate-router-host-lifecycle.ps1")
+        Markers   = @{
+            "installer/scripts/router-lifecycle.ps1" = "function Open-SharedReadStream {"
+            "local-router/src/Router.State/AtomicFileWriter.cs" = "private static async Task ReplaceWithBoundedSharingRetryAsync("
+            "local-router/tests/Router.Core.Tests/State/AtomicFileWriterSharingRetryTests.cs" = "public sealed class AtomicFileWriterSharingRetryTests"
+            "local-router/tests/Router.Core.Tests/State/StatePersistenceDiagnosticTests.cs" = "(!_failed || operation == StatePersistenceOperation.ReplaceFile)"
+            "tests/fixtures/local-router/startup-gate/StartupGateProbe.cs" = "stoppedFailure.FailureCount == 4"
+            "tests/validate-router-host-lifecycle.ps1" = "# --- 2b. Shared runtime-state reads (OSS-M4-2-HOTFIX2)"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
