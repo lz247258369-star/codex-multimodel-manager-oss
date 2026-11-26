@@ -1250,6 +1250,34 @@ $script:RegisteredSlices = @(
             "local-router/tests/Router.Core.Tests/State/AtomicFileWriterSharingRetryTests.cs" = "public async Task Unable_to_remove_replaced_with_the_temp_gone_is_not_retried_and_keeps_the_previous_file()"
         }
     }
+    # OSS-M4-3-COLLABORATION-DOCS: documentation only. One authoritative document per topic, the shared
+    # Claude Code / Codex procedure, the OSS project status, the locked V1 work order and the registered open risks.
+    [pscustomobject]@{
+        Name      = "OSS-M4-3-COLLABORATION-DOCS"
+        Base      = "2edf8a7d9b43ec2ef4745faf5f9d2d34fdd8d6df"
+        Tip       = "fad275e07c8b4e6898d37ec6cc1bac17b7cc43c9"
+        Artifacts = @(
+            "AGENTS.md",
+            "CLAUDE.md",
+            "CONTRIBUTING.md",
+            "docs/HS1C_QUOTA_EXHAUSTION_STICKY_FAILOVER.md",
+            "docs/LOCAL_ROUTER_RUNTIME_ROADMAP.md",
+            "docs/MASTER_ROADMAP.md",
+            "docs/PRODUCT_VISION.md",
+            "docs/PROJECT_STATUS.md",
+            "docs/README.md")
+        Markers   = @{
+            "AGENTS.md" = "## Collaboration and project state"
+            "CLAUDE.md" = "tools/oss-workflow/Invoke-TieredVerification.ps1"
+            "CONTRIBUTING.md" = "Invoke-TieredVerification.ps1 -PlanOnly"
+            "docs/HS1C_QUOTA_EXHAUSTION_STICKY_FAILOVER.md" = "arrived here with the genesis import"
+            "docs/LOCAL_ROUTER_RUNTIME_ROADMAP.md" = "LR-0 through LR-14 are implemented and LR-15 is in progress"
+            "docs/MASTER_ROADMAP.md" = "OSS-M4-4"
+            "docs/PRODUCT_VISION.md" = "PARTIALLY_FEASIBLE"
+            "docs/PROJECT_STATUS.md" = "OSS-M4-2-HOTFIX1 / HOTFIX2"
+            "docs/README.md" = "## Authoritative project documents"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
