@@ -1,6 +1,6 @@
 # Local Router Runtime Roadmap
 
-Status: **implementation roadmap; LR-0 only is in scope for this change**
+Status: **implementation roadmap**. LR-0 through LR-14 are implemented and LR-15 is in progress. Current state: `docs/PROJECT_STATUS.md`; parent roadmap: `docs/MASTER_ROADMAP.md`.
 
 Roadmap version: `local-router-roadmap/v1`
 

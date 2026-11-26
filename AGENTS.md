@@ -49,6 +49,20 @@ The CI gate checks at minimum:
 - Windows entrypoint target integrity;
 - stealth-model alias/migration safety and installer-to-Skill script parity.
 
+## Collaboration and project state
+
+These rules are the safety floor for every agent, Codex included. The working procedure that builds on them is in [CLAUDE.md](CLAUDE.md). It applies to Codex sessions as well and covers:
+
+- roles: owner, project manager, implementer;
+- session start and resume, and task approval;
+- verification levels, LR-14 registration, session handoff and reporting.
+
+Where CLAUDE.md and this file differ, the stricter rule wins.
+
+- Product goals: `docs/PRODUCT_VISION.md`. Roadmap and V1 scope: `docs/MASTER_ROADMAP.md`.
+- Current state, the next scheduled task and open risks: `docs/PROJECT_STATUS.md`. The real Git history takes precedence over these documents.
+- Work starts only from a task brief given in the current session by the owner or the project manager. A next task listed in a document is not by itself an approval to start.
+
 ## Compatibility rule
 
 Current Codex custom providers are treated as Responses API providers. Do not reintroduce legacy `wire_api = "chat"` into active configuration logic.

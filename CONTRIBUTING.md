@@ -24,10 +24,31 @@ licence).
 ## Development Gate
 
 Pull requests must pass the **Development Gate** workflow (`development-gate`).
-Run the canonical validation locally before opening a pull request:
+Pick the local verification level from your real change set; the tool refuses
+a level below the policy minimum:
+
+```powershell
+pwsh -NoProfile -File tools/oss-workflow/Invoke-TieredVerification.ps1 -PlanOnly
+pwsh -NoProfile -File tools/oss-workflow/Invoke-TieredVerification.ps1
+```
+
+| Level | Typical change |
+|---|---|
+| L1 | documentation only |
+| L2 | one .NET project, validator or fixture; workflow tools; a pure-data LR-14 registration |
+| L3 | installer, Skill, Router Host, CI, SDK pin, gates, or anything cross-module |
+
+The exact rules are in [tools/oss-workflow/README.md](tools/oss-workflow/README.md).
+L3 runs every Development Gate step locally, including the canonical validation:
 
 ```powershell
 pwsh -NoProfile -File tests/validate-repo.ps1 -RepositoryRoot $PWD
+```
+
+Before pushing, run the commit identity privacy gate; it must exit with 0:
+
+```powershell
+pwsh -NoProfile -File tools/oss-workflow/Test-CommitIdentityPrivacy.ps1
 ```
 
 Requirements: Windows, PowerShell 7, Git, and the .NET SDK pinned in

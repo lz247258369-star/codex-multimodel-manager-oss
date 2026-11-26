@@ -3,6 +3,9 @@
 > 状态：**草案（DRAFT）——待项目经理独立验收、老板批准。**
 > 本文件把[产品蓝图](PRODUCT_VISION.md)拆成版本里程碑。**§2 的 V1 范围是“建议”，经老板逐项批准后才成为正式范围。合并本规划文档不等于批准 V1 全部功能。** 已有的 Local Router 工程路线图 `LOCAL_ROUTER_RUNTIME_ROADMAP.md`（LR-0…LR-15）是本文件的子路线图，继续有效。
 > 状态分类与 PRODUCT_VISION §0 一致：已确认的产品目标 / 待批准的 V1 范围 / 技术可行性待研究 / 已进入 main 的代码能力 / 已通过实际用户环境验收的能力。
+> **本文件是“长期路线与 V1 范围”的权威来源。** 当前真实进度与下一项排定任务只在 [PROJECT_STATUS.md](PROJECT_STATUS.md) 中维护，本文件的“现状”列只做摘要；两者不一致时以 PROJECT_STATUS（及真实 Git）为准。
+
+**名称约定：** 本文件的 M0…M6 是**产品里程碑**。项目经理下发的 `OSS-M1`…`OSS-M4-x` 是开源仓库迁移与工程基线的**任务编号**，与产品里程碑无关；例如 `OSS-M4-2` 不是本文件的 M4（V1 发布候选）。
 
 ## 1. 里程碑总览
 
@@ -27,6 +30,8 @@ M6+ V1 之后的版本（§5）
 
 每个里程碑内部仍遵守“一次一个已批准任务、一个独立可审查 PR”的开发规则（见根目录 `CLAUDE.md`）。M1 的研究结论无论如何，V1-11 都保留在 V1 决策清单中，由老板在 M2 决定。
 
+当前位置（2026-11-26 核对）：M0 已交付，并且 HS-1C（Router 内第三方额度耗尽粘性切换）已随 genesis 导入进入 `main`。M1 研究已完成（结论 PARTIALLY_FEASIBLE，见 [CHATGPT_SUBSCRIPTION_QUOTA_FAILOVER_FEASIBILITY.md](CHATGPT_SUBSCRIPTION_QUOTA_FAILOVER_FEASIBILITY.md)）。**M2 范围冻结尚未在 Git 中记录**：§2 全部条目仍是“建议”。M3 中当前锁定的施工顺序见 §4.3。
+
 ## 2. V1 建议范围（待老板批准）
 
 本表**全部条目均为“待批准的 V1 范围”**，老板批准前不构成正式 V1 范围。
@@ -45,13 +50,13 @@ M6+ V1 之后的版本（§5）
 | V1-07 | Codex CLI Router 集成（opt-in，可精确恢复） | — | ❓ 必备/可选 | ✅ 代码 | 真实 Provider 端到端证据（付费，需批准） |
 | V1-08 | Codex Desktop Router 集成（opt-in） | — | ❓ 可选 | ✅ 代码 | Desktop 实机兼容矩阵大量 NOT VERIFIED |
 | V1-09 | 线程级模型选择（HS-1B） | — | ❓ 可选 | ✅ slice 1，默认关闭 | 后续 slice 范围未定义；Desktop 实机验证 |
-| V1-10 | **Router 内第三方 Provider 之间额度耗尽粘性切换（HS-1C）**，含“全部备用模型不可用时的明确失败状态” | G-2、G-3、G-6 | ❓ 建议必备 | 🟡 Draft #88，未进入 main | 先核对 HS-1C 依赖的 HS-1B 能力是否已全部在 `main`；在当前 `main` 上重建、复审、CI；全部不可用时的失败语义按 G-6 验收 |
-| V1-11 | **ChatGPT 订阅额度耗尽 → 自动切换到可用备用模型** | G-1…G-6 | ❓ **V1 范围待老板在 M2 决定（保留在 V1 决策清单，不默认移至后续版本）** | **已明确的产品目标；当前尚无经过验证的可行实现；需要独立技术可行性研究** | M1 独立技术可行性研究（PRODUCT_VISION §6.1）提供证据与推荐方案；“提示 + 一键切换”只能经老板批准后作为降级方案 |
-| V1-12 | 手动切换优先 + 后续耗尽仍自动切换 + 不强制切回原模型 | G-4、G-5 | ❓ 随 V1-10 / V1-11 | 🟡 Router 内：包含在 #88；ChatGPT 订阅额度：同 V1-11 | 同 V1-10 / V1-11 |
-| V1-13 | V4 中额度切换的当前状态、切换原因与**基础历史记录**（按时间列出每次切换：时间、来源模型、目标模型、原因、结果；含全部不可用的失败记录） | G-2、G-6 | ❓ 随 V1-10 / V1-11 | ⬜ | 新 UI 切片 + 历史记录的存储设计（现有 HS-1B 设计不做线程选择的持久化，需要单独设计）；高级查询/筛选/统计/通知属于 V1.1，不在 V1 重复建设 |
+| V1-10 | **Router 内第三方 Provider 之间额度耗尽粘性切换（HS-1C）**，含“全部备用模型不可用时的明确失败状态” | G-2、G-3、G-6 | ❓ 建议必备 | ✅ 代码（私有 #108、#110，随 genesis 导入；默认关闭；仅 fake Provider 验证） | 错误码的 HTTP 状态映射（私有 Draft #111，未迁移）；实际用户环境验收 |
+| V1-11 | **ChatGPT 订阅额度耗尽 → 自动切换到可用备用模型** | G-1…G-6 | ❓ **V1 范围待老板在 M2 决定（保留在 V1 决策清单，不默认移至后续版本）** | **已明确的产品目标；当前尚无经过验证的可行实现。** M1 研究已完成：PARTIALLY_FEASIBLE（CLI 部分可行，Desktop 当前 BLOCKED，最高证据 A/B） | 老板在 M2 基于研究证据决定；“提示 + 一键切换”只能经老板批准后作为降级方案 |
+| V1-12 | 手动切换优先 + 后续耗尽仍自动切换 + 不强制切回原模型 | G-4、G-5 | ❓ 随 V1-10 / V1-11 | Router 内：✅ 代码，随 V1-10；ChatGPT 订阅额度：同 V1-11 | 同 V1-10 / V1-11 |
+| V1-13 | V4 中额度切换的当前状态、切换原因与**基础历史记录**（按时间列出每次切换：时间、来源模型、目标模型、原因、结果；含全部不可用的失败记录） | G-2、G-6 | ❓ 随 V1-10 / V1-11 | 🟡 私有 Draft #113（Router 侧）、#114（V4），未迁移 | 是否迁移由项目经理 / 老板决定；高级查询/筛选/统计/通知属于 V1.1，不在 V1 重复建设 |
 | V1-14 | Router Host 生命周期（Status/Start/Stop） | — | 必备（若 Router 进 V1） | ✅ PR10B | 与安装组合的绑定 |
-| V1-15 | 发布包组合（PR6 包 + PR9 Host 统一账本） | — | 必备（若 Router 进 V1） | ⬜ | 组合阶段设计与实现 |
-| V1-16 | 安装 / 安全卸载（含 stopped lease） | — | 必备 | ✅ 组件已在 `main`，但整体流程不可用 | 安装绑定 + PR8 lease |
+| V1-15 | 发布包组合（PR6 包 + PR9 Host 统一账本） | — | 必备（若 Router 进 V1） | 🟡 私有 Draft #115 已实现，**未迁移** | §4.3 第 1 项：迁移、复审、CI |
+| V1-16 | 安装 / 安全卸载（含 stopped lease） | — | 必备 | ✅ 组件已在 `main`，但整体流程不可用；BIND1 安装身份绑定在私有仓库已实现，**未迁移** | §4.3 第 2 项 BIND1；随后提供 PR8 stopped lease |
 | V1-17 | 升级与回滚演练 | — | 必备 | ⬜ | 设计 + 演练脚本 + 证据 |
 | V1-18 | 用户文档（README 中英文）、CHANGELOG、已知限制 | — | 必备 | ⬜（文档停在 V3.5/3.8.0） | 文档切片 |
 | V1-19 | 代码签名 / 发布渠道 | — | ❓ | ⬜ | 老板决定是否需要 |
@@ -111,6 +116,27 @@ V1 只有在以下全部满足时才能发布。每一条都必须有可追溯�
 11. **发布候选验收**（M4，§3，含经批准的付费实测）。
 
 7–10 与 3–6 没有代码依赖，老板可以批准调整其先后，但每次仍只执行一个已批准任务。
+
+核对（2026-11-26）：第 3、4 项已在私有仓库完成（私有 #108 在当时的 `main` 上重建 HS-1C，#110 补齐安装器配置），随 genesis 导入进入本仓库；`main` 中的 HS-1C 包含 G-6 的有界失败 `quota_fallbacks_exhausted`。
+
+### 4.3 当前锁定的施工顺序（OSS-M4-3 起）
+
+来源：项目经理 OSS-M4-3 任务书（2026-11-26）。OSS-M4-3 完成后停止辅助工具扩张，OSS-M4-4 暂缓。本节只排定顺序，**不改变 §2 任何条目的批准状态**；每一项开工都需要单独的施工任务书。
+
+1. **Release Composition 迁移**（V1-15 的 LR-15 组合阶段，即 §4.2 第 7 项的前半）。
+   - 来源：私有 Draft #115 的实现提交（不含其私有 LR-14 登记），以作者信息已去除的 `git diff` 补丁形式在仓库外保存。
+   - 涉及 8 个文件：`installer/scripts/build-router-release-composition.ps1`、`router-composition-verify.ps1`、`router-release-composition.psm1`、`router-install-ownership.psm1`，`tests/validate-router-release-composition.ps1`、`tests/validate-repo.ps1`，`docs/ROUTER_RELEASE_COMPOSITION.md`、`docs/LOCAL_ROUTER_RUNTIME_ROADMAP.md`。
+   - 做法：作为普通 PR 在当时最新的 `main` 上重新应用：一个实现提交，加一个只追加 LR-14 登记的提交（`Base`/`Tip` 使用本仓库 SHA）。不导入任何私有提交、作者或基于私有 SHA 的授权。
+   - 验证：涉及 installer 与 `validate-repo.ps1`，分级验证工具会要求 L3；另有 `validate-router-release-composition.ps1` 与 PR6 / PR7 回归；GitHub Development Gate 必须通过。
+   - 2026-11-26 只读核对：该补丁在 `main` `2edf8a7` 上通过 `git apply --check`。这不是施工，也不代表迁移后的验证结果。
+2. **BIND1 迁移**（安装身份绑定，依赖第 1 项）。
+   - 涉及 5 个文件：`installer/scripts/router-install-identity.psm1`、`tests/validate-router-install-identity.ps1`、`tests/validate-repo.ps1`、`docs/ROUTER_INSTALL_IDENTITY.md`、`docs/LOCAL_ROUTER_RUNTIME_ROADMAP.md`。
+   - 做法与验证同第 1 项。它是 PR8 stopped lease 的前提（`ROUTER_HOST_LIFECYCLE.md` §BLOCKED 1）。
+   - 补丁只能在第 1 项之上检查，尚未单独核对。
+3. **安装、卸载、升级、回滚及其他剩余 V1 功能**：按 §4.2 第 7–10 项与真实 Git 逐项确定，每项一个任务书、一个 PR。
+4. **全功能回归、安全验收、真实环境验证与 V1 发布审批**（M4 → M5，§3 的全部标准）。
+
+迁移完成之前，不得在任何文档或报告中宣称 Release Composition 或 BIND1 已在本仓库实现。
 
 ## 5. V1 之后的版本路线（建议，未批准）
 

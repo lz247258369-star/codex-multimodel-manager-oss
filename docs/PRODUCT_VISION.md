@@ -3,6 +3,7 @@
 > 状态：**草案（DRAFT）——待项目经理独立验收、老板批准。**
 > 本文件描述 codex-multimodel-manager 的**最终完整版**目标。它是审查范围与方向，**不代表这些能力已经实现，也不代表它们都属于 V1。** 实际进度以 [PROJECT_STATUS.md](PROJECT_STATUS.md) 为准，阶段划分以 [MASTER_ROADMAP.md](MASTER_ROADMAP.md) 为准。
 > **合并本规划文档不等于批准 V1 全部范围。** V1 范围只有在老板逐项批准后才正式确定（见 MASTER_ROADMAP §2）。
+> **本文件是“产品最终目标”的权威来源。** 下文“实现状态”“当前状态摘要”两列只是摘要，最近一次核对：2026-11-26；以 PROJECT_STATUS 为准。
 
 ## 0. 五类状态（四份总控文档统一使用）
 
@@ -27,7 +28,7 @@
 | ID | 已确认的产品目标 | 实现状态（摘要） |
 |---|---|---|
 | G-1 | **ChatGPT 订阅账户的官方模型优先**：默认使用 ChatGPT 订阅账户（Codex 登录账户）提供的官方模型。 | Direct Mode 已进入 main |
-| G-2 | **只有明确的额度耗尽才自动切换**到可用的备用模型；普通 429、超时、5xx、延迟、价格、健康波动都不触发。 | ChatGPT 订阅额度：**已明确的产品目标；当前尚无经过验证的可行实现；需要独立技术可行性研究。** Router 内第三方 Provider 之间：Draft #88（HS-1C），未进入 main |
+| G-2 | **只有明确的额度耗尽才自动切换**到可用的备用模型；普通 429、超时、5xx、延迟、价格、健康波动都不触发。 | ChatGPT 订阅额度：**已明确的产品目标；当前尚无经过验证的可行实现**（M1 研究结论 PARTIALLY_FEASIBLE，见 §6.1）。Router 内第三方 Provider 之间：HS-1C 已进入 main（默认关闭，仅 fake Provider 验证） |
 | G-3 | **额度未耗尽时保持当前模型**。 | 同 G-2 |
 | G-4 | **手动切换后，后续额度耗尽仍可自动切换**（手动选择立即生效且优先，自动切换在下一次耗尽时重新生效）。 | 同 G-2 |
 | G-5 | **不自动强制切回**额度已恢复的原模型。 | 同 G-2 |
@@ -77,15 +78,15 @@
 |---|---|---|
 | A. 官方模型优先 | ChatGPT 订阅账户的官方模型为默认；账户可用模型自动选择 | Direct Mode 已进入 main |
 | B. 多模型 / 多 Provider 管理 | OpenRouter、阿里云 Model Studio、OpenAI API、小米 MiMo、DeepSeek 等，统一目录、品牌与版本层级 | Direct 与 Router 适配器已进入 main（Router 仅 fake 验证） |
-| C. 额度耗尽自动切换 | 当前模型额度明确耗尽时，切换到可用的备用模型并保持；手动优先；不强制切回 | Router 内 Provider 之间：Draft #88（未进入 main）；**ChatGPT 订阅额度：已明确的产品目标；当前尚无经过验证的可行实现；需要独立技术可行性研究** |
+| C. 额度耗尽自动切换 | 当前模型额度明确耗尽时，切换到可用的备用模型并保持；手动优先；不强制切回 | Router 内 Provider 之间：HS-1C 已进入 main（默认关闭）；**ChatGPT 订阅额度：已明确的产品目标；当前尚无经过验证的可行实现**（M1 研究：PARTIALLY_FEASIBLE） |
 | D. 未耗尽保持 | 不因瞬时错误或价格变化切换 | HS-1C 设计包含 |
 | E. 手动切换与恢复自动 | 手动选择立即生效且优先；下一次耗尽时自动切换重新生效 | HS-1C 设计包含（generation CAS + re-arm） |
 | F. Codex CLI 集成 | Direct 与 Router 两种模式，opt-in、可精确恢复 | 已实现（LR-12） |
 | G. Codex Desktop 集成 | Direct 第三方路由 + Router 路由；同一线程内切换模型（Router 侧线程级覆盖） | 已实现代码；**Desktop 实机验收不足** |
-| H. V4 可视化管理 | 模型矩阵、Provider、健康、Router 状态、用量/成本、策略、额度切换状态与历史 | 大部分已实现；额度切换 UI 未实现 |
+| H. V4 可视化管理 | 模型矩阵、Provider、健康、Router 状态、用量/成本、策略、额度切换状态与历史 | 大部分已实现；额度切换状态与历史只在私有 Draft 中，未迁移 |
 | I. Local Router | 本地 loopback、认证、Responses 协议、路由解析、健康、用量、策略、线程级选择 | LR-0…LR-14 已合并，默认关闭 |
 | J. 模型发现、验证与更新 | 只读发现 → 候选 → 显式探测 → 显式批准 → 注册；匿名模型生命周期 | Direct 已实现；Router 目录投影已实现 |
-| K. 安装 / 卸载 / 升级 / 回滚 | 一键安装、可验证包、所有权清单、安全卸载、升级与回滚演练 | 组件已实现（PR6–PR10B），整体组合与演练未完成 |
+| K. 安装 / 卸载 / 升级 / 回滚 | 一键安装、可验证包、所有权清单、安全卸载、升级与回滚演练 | 组件已实现（PR6–PR10B）；组合（Release Composition）与安装身份绑定（BIND1）待迁移；升级与回滚演练未完成 |
 | L. 安全 | 密钥引用、loopback、本地认证、ACL、不杀未知进程、不泄露日志 | 持续执行，CI 静态门 + 原生测试 |
 | M. 故障恢复 | 状态损坏隔离、未知状态报告 UNKNOWN、Safe Restore Direct、崩溃日志 | 部分实现 |
 | N. 正式发布 | 发布包、签名/来源证明、支持矩阵、已知限制、用户文档与变更日志 | 来源证明已实现；签名、矩阵、文档未完成 |
@@ -122,6 +123,7 @@
 
 1. **ChatGPT 订阅额度的检测与自动切换（G-2…G-5 对 ChatGPT 订阅额度的适用）。**
    状态：**已明确的产品目标；当前尚无经过验证的可行实现；需要独立技术可行性研究。**
+   研究进展（2026-11-26 核对）：M1 研究已完成，总体结论 **PARTIALLY_FEASIBLE**（CLI 托管 app-server 路径部分可行；Desktop 在研究时的版本上 BLOCKED；最高证据 A/B，没有真实订阅额度耗尽的端到端证据），见 [CHATGPT_SUBSCRIPTION_QUOTA_FAILOVER_FEASIBILITY.md](CHATGPT_SUBSCRIPTION_QUOTA_FAILOVER_FEASIBILITY.md) 与 [CLI_REMOTE_TUI_INTEGRATION_VALIDATION.md](CLI_REMOTE_TUI_INTEGRATION_VALIDATION.md)。老板尚未基于该研究作出 M2 决定，以下研究方向的描述保留原文。
    现有 HS-1C 设计只覆盖 Router 内第三方 Provider 之间的切换。对 ChatGPT 订阅额度，需要研究：如何在不读取、不代理账户凭据的前提下，可靠识别“ChatGPT 订阅额度已耗尽”，以及如何把后续请求切换到备用模型。研究方向（均**未验证**，只是研究输入，不是结论）：
    - (a) Codex 自身是否暴露可用的额度/限流信号（例如 app-server 事件或错误码），可被 Manager / Router 只读获取；
    - (b) 在 Codex 客户端侧（CLI / Desktop）由 Manager 观察到耗尽后改道到 Router 备用路由的可行路径；
