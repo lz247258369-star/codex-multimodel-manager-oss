@@ -41,6 +41,9 @@ public static class StatePersistenceDiagnostic
         {
             32 => "sharing_violation",
             5 => "access_denied",
+            // OSS-M4-2-HOTFIX2-FIX1: ERROR_UNABLE_TO_REMOVE_REPLACED, reported as
+            // itself; it is not a confirmed sharing violation.
+            1175 => "unable_to_remove_replaced",
             _ => "unknown",
         };
         string cause = error switch

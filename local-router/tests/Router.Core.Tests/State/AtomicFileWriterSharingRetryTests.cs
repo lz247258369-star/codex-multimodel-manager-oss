@@ -17,6 +17,7 @@ namespace Router.Core.Tests.State;
 public sealed class AtomicFileWriterSharingRetryTests
 {
     private const int SharingViolation = unchecked((int)0x80070020);
+    private const int UnableToRemoveReplaced = unchecked((int)0x80070497); // 1175
     private const int MaxAttempts = 4; // first attempt + three retries
     private const string Previous = "previous-good-state";
     private const string Next = "next-state";
@@ -59,11 +60,15 @@ public sealed class AtomicFileWriterSharingRetryTests
         "path-not-found",
         "generic-io",
         "win32-32-not-io",
+        "unable-to-move-replacement-1176",
+        "unable-to-move-replacement-2-1177",
+        "win32-1175-not-io",
+        "access-denied-with-1175-hresult",
     };
 
     [Theory]
     [MemberData(nameof(NonSharingFailures))]
-    public async Task Failure_that_is_not_an_identified_sharing_violation_is_never_retried(string kind)
+    public async Task Failure_that_is_not_an_approved_transient_replace_failure_is_never_retried(string kind)
     {
         ScriptedReplaceFileSystem fileSystem = new([NonSharingFault(kind)]);
         string target = SeedPrevious(fileSystem);
@@ -83,6 +88,140 @@ public sealed class AtomicFileWriterSharingRetryTests
         ScriptedReplaceFileSystem fileSystem = new(Enumerable.Repeat<Exception?>(SharingFault(), 50))
         {
             OnReplaceFailure = cancellation.Cancel,
+        };
+        string target = SeedPrevious(fileSystem);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            AtomicFileWriter.WriteAsync(target, Encoding.UTF8.GetBytes(Next), fileSystem, cancellation.Token));
+
+        Assert.Equal(1, fileSystem.ReplaceCalls);
+        Assert.Equal(Previous, fileSystem.Inner.ReadFileText(target));
+        AssertNoTempFile(fileSystem.Inner);
+    }
+
+    // OSS-M4-2-HOTFIX2-FIX1: ERROR_UNABLE_TO_REMOVE_REPLACED (1175). Every case
+    // below is deterministic fault injection; none reproduces a native 1175.
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task Unable_to_remove_replaced_is_retried_and_the_replace_then_succeeds(int failures)
+    {
+        ScriptedReplaceFileSystem fileSystem = new(Enumerable.Repeat<Exception?>(UnableToRemoveReplacedFault(), failures));
+        string target = SeedPrevious(fileSystem);
+
+        RouterError? error = await AtomicFileWriter.WriteAsync(target, Encoding.UTF8.GetBytes(Next), fileSystem, CancellationToken.None);
+
+        Assert.Null(error);
+        Assert.Equal(failures + 1, fileSystem.ReplaceCalls);
+        Assert.Equal(Next, fileSystem.Inner.ReadFileText(target));
+        AssertNoTempFile(fileSystem.Inner);
+    }
+
+    [Fact]
+    public async Task Persistent_unable_to_remove_replaced_exhausts_the_budget_keeps_the_previous_file_and_cleans_the_temp()
+    {
+        ScriptedReplaceFileSystem fileSystem = new(Enumerable.Repeat<Exception?>(UnableToRemoveReplacedFault(), 50));
+        string target = SeedPrevious(fileSystem);
+
+        RouterError? error = await AtomicFileWriter.WriteAsync(target, Encoding.UTF8.GetBytes(Next), fileSystem, CancellationToken.None);
+
+        Assert.Equal(RouterErrorCode.StateWriteFailed, error!.Code);
+        Assert.Equal(MaxAttempts, fileSystem.ReplaceCalls);
+        Assert.Equal(Previous, fileSystem.Inner.ReadFileText(target));
+        AssertNoTempFile(fileSystem.Inner);
+    }
+
+    [Fact]
+    public async Task Unable_to_remove_replaced_with_the_target_gone_is_not_retried_and_nothing_is_recreated()
+    {
+        ScriptedReplaceFileSystem? fileSystem = null;
+        fileSystem = new([UnableToRemoveReplacedFault()])
+        {
+            OnReplaceFault = (_, destination) => fileSystem!.Inner.DeleteFile(destination),
+        };
+        string target = SeedPrevious(fileSystem);
+
+        RouterError? error = await AtomicFileWriter.WriteAsync(target, Encoding.UTF8.GetBytes(Next), fileSystem, CancellationToken.None);
+
+        Assert.Equal(RouterErrorCode.StateWriteFailed, error!.Code);
+        Assert.Equal(1, fileSystem.ReplaceCalls);
+        Assert.False(fileSystem.Inner.HasFile(target));
+        AssertNoTempFile(fileSystem.Inner);
+    }
+
+    [Fact]
+    public async Task Unable_to_remove_replaced_with_the_temp_gone_is_not_retried_and_keeps_the_previous_file()
+    {
+        ScriptedReplaceFileSystem? fileSystem = null;
+        fileSystem = new([UnableToRemoveReplacedFault()])
+        {
+            OnReplaceFault = (source, _) => fileSystem!.Inner.DeleteFile(source),
+        };
+        string target = SeedPrevious(fileSystem);
+
+        RouterError? error = await AtomicFileWriter.WriteAsync(target, Encoding.UTF8.GetBytes(Next), fileSystem, CancellationToken.None);
+
+        Assert.Equal(RouterErrorCode.StateWriteFailed, error!.Code);
+        Assert.Equal(1, fileSystem.ReplaceCalls);
+        Assert.Equal(Previous, fileSystem.Inner.ReadFileText(target));
+        AssertNoTempFile(fileSystem.Inner);
+    }
+
+    [Fact]
+    public async Task Unable_to_remove_replaced_whose_presence_check_fails_is_not_retried()
+    {
+        ScriptedReplaceFileSystem fileSystem = new([UnableToRemoveReplacedFault()])
+        {
+            FileExistsAfterFault = static _ => throw new IOException("private-fault-detail"),
+        };
+        string target = SeedPrevious(fileSystem);
+
+        RouterError? error = await AtomicFileWriter.WriteAsync(target, Encoding.UTF8.GetBytes(Next), fileSystem, CancellationToken.None);
+
+        Assert.Equal(RouterErrorCode.StateWriteFailed, error!.Code);
+        Assert.Equal(1, fileSystem.ReplaceCalls);
+        Assert.Equal(Previous, fileSystem.Inner.ReadFileText(target));
+    }
+
+    [Fact]
+    public async Task Mixed_sharing_and_unable_to_remove_replaced_failures_share_one_budget_and_can_still_recover()
+    {
+        ScriptedReplaceFileSystem fileSystem = new([SharingFault(), UnableToRemoveReplacedFault(), SharingFault()]);
+        string target = SeedPrevious(fileSystem);
+
+        RouterError? error = await AtomicFileWriter.WriteAsync(target, Encoding.UTF8.GetBytes(Next), fileSystem, CancellationToken.None);
+
+        Assert.Null(error);
+        Assert.Equal(MaxAttempts, fileSystem.ReplaceCalls);
+        Assert.Equal(Next, fileSystem.Inner.ReadFileText(target));
+        AssertNoTempFile(fileSystem.Inner);
+    }
+
+    [Fact]
+    public async Task Mixed_persistent_failures_never_exceed_the_shared_budget()
+    {
+        Exception?[] alternating = [.. Enumerable.Range(0, 50).Select(i => i % 2 == 0 ? (Exception)UnableToRemoveReplacedFault() : SharingFault())];
+        ScriptedReplaceFileSystem fileSystem = new(alternating);
+        string target = SeedPrevious(fileSystem);
+
+        RouterError? error = await AtomicFileWriter.WriteAsync(target, Encoding.UTF8.GetBytes(Next), fileSystem, CancellationToken.None);
+
+        Assert.Equal(RouterErrorCode.StateWriteFailed, error!.Code);
+        Assert.Equal(MaxAttempts, fileSystem.ReplaceCalls);
+        Assert.Equal(Previous, fileSystem.Inner.ReadFileText(target));
+        AssertNoTempFile(fileSystem.Inner);
+    }
+
+    [Fact]
+    public async Task Cancellation_while_waiting_to_retry_an_unable_to_remove_replaced_stops_the_write()
+    {
+        using CancellationTokenSource cancellation = new();
+        // The 1 ms timer fires inside the first 25 ms retry wait; whether it lands
+        // before or during the wait, the write must stop with no further replace.
+        ScriptedReplaceFileSystem fileSystem = new(Enumerable.Repeat<Exception?>(UnableToRemoveReplacedFault(), 50))
+        {
+            OnReplaceFailure = () => cancellation.CancelAfter(1),
         };
         string target = SeedPrevious(fileSystem);
 
@@ -221,6 +360,10 @@ public sealed class AtomicFileWriterSharingRetryTests
 
     private static IOException SharingFault() => new("private-fault-detail", SharingViolation);
 
+    // Injected, not a reproduction of a native Windows failure: File.Replace
+    // reports ERROR_UNABLE_TO_REMOVE_REPLACED as an IOException with this HRESULT.
+    private static IOException UnableToRemoveReplacedFault() => new("private-fault-detail", UnableToRemoveReplaced);
+
     private static Exception NonSharingFault(string kind) => kind switch
     {
         "access-denied" => new UnauthorizedAccessException("private-fault-detail"),
@@ -229,6 +372,10 @@ public sealed class AtomicFileWriterSharingRetryTests
         "path-not-found" => new DirectoryNotFoundException("private-fault-detail"),
         "generic-io" => new IOException("private-fault-detail"),
         "win32-32-not-io" => new System.ComponentModel.Win32Exception(32, "private-fault-detail"),
+        "unable-to-move-replacement-1176" => new IOException("private-fault-detail", unchecked((int)0x80070498)),
+        "unable-to-move-replacement-2-1177" => new IOException("private-fault-detail", unchecked((int)0x80070499)),
+        "win32-1175-not-io" => new System.ComponentModel.Win32Exception(1175, "private-fault-detail"),
+        "access-denied-with-1175-hresult" => new UnauthorizedAccessException("private-fault-detail") { HResult = UnableToRemoveReplaced },
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -249,19 +396,30 @@ public sealed class AtomicFileWriterSharingRetryTests
         public int ReplaceCalls { get; private set; }
         public Action? OnReplaceFailure { get; init; }
 
+        /// <summary>Runs after a scripted fault with (temp path, target path).</summary>
+        public Action<string, string>? OnReplaceFault { get; init; }
+
+        /// <summary>Replaces FileExists once a replace fault has occurred.</summary>
+        public Func<string, bool>? FileExistsAfterFault { get; init; }
+
+        private bool _faulted;
+
         public void ReplaceFile(string sourcePath, string destinationPath)
         {
             ReplaceCalls++;
             if (_script.TryDequeue(out Exception? fault) && fault is not null)
             {
+                _faulted = true;
                 OnReplaceFailure?.Invoke();
+                OnReplaceFault?.Invoke(sourcePath, destinationPath);
                 throw fault;
             }
 
             Inner.ReplaceFile(sourcePath, destinationPath);
         }
 
-        public bool FileExists(string path) => Inner.FileExists(path);
+        public bool FileExists(string path)
+            => _faulted && FileExistsAfterFault is not null ? FileExistsAfterFault(path) : Inner.FileExists(path);
         public bool DirectoryExists(string path) => Inner.DirectoryExists(path);
         public void CreateDirectory(string path) => Inner.CreateDirectory(path);
         public IEnumerable<string> EnumerateFiles(string directory, string pattern) => Inner.EnumerateFiles(directory, pattern);
@@ -356,17 +514,73 @@ public sealed class AtomicFileWriterSharingDiagnosticTests
         }
     }
 
-    private sealed class AlwaysSharingFileSystem(int failures) : IFileSystem
+    [Fact]
+    public async Task Exhausted_unable_to_remove_replaced_reports_its_own_redacted_category_never_a_sharing_violation()
+    {
+        string target = Path.Combine("fake-sandbox", "private-runtime-detail", "router.state.json");
+        TextWriter original = Console.Error;
+        StringWriter captured = new();
+        Console.SetError(captured);
+        try
+        {
+            AlwaysSharingFileSystem exhausted = new(failures: int.MaxValue, hresult: unchecked((int)0x80070497));
+            exhausted.Inner.SeedFile(target, "previous-good-state");
+            RouterError? exhaustedError = await AtomicFileWriter.WriteAsync(target, [1, 2, 3], exhausted, CancellationToken.None);
+            string exhaustedOutput = captured.ToString();
+
+            captured.GetStringBuilder().Clear();
+            AlwaysSharingFileSystem recovered = new(failures: 1, hresult: unchecked((int)0x80070497));
+            recovered.Inner.SeedFile(target, "previous-good-state");
+            RouterError? recoveredError = await AtomicFileWriter.WriteAsync(target, [1, 2, 3], recovered, CancellationToken.None);
+            string recoveredOutput = captured.ToString();
+
+            Assert.Equal(RouterErrorCode.StateWriteFailed, exhaustedError!.Code);
+            Assert.Equal(4, exhausted.ReplaceCalls);
+            string line = Assert.Single(exhaustedOutput.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries),
+                static l => l.Contains("state_persistence_failed", StringComparison.Ordinal));
+            Assert.Equal(
+                "[local-router] state_persistence_failed: target=runtime_state operation=ReplaceFile cause=IOException hresult=80070497 native=1175 category=unable_to_remove_replaced.",
+                line);
+            Assert.DoesNotContain("sharing_violation", exhaustedOutput, StringComparison.Ordinal);
+            Assert.DoesNotContain("private", exhaustedOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Null(recoveredError);
+            Assert.DoesNotContain("state_persistence_failed", recoveredOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetError(original);
+        }
+    }
+
+    [Theory]
+    [InlineData(unchecked((int)0x80070497), "native=1175 category=unable_to_remove_replaced")]
+    [InlineData(unchecked((int)0x80070498), "native=1176 category=unknown")]
+    [InlineData(unchecked((int)0x80070499), "native=1177 category=unknown")]
+    [InlineData(unchecked((int)0x80070020), "native=32 category=sharing_violation")]
+    public void Replace_failure_categories_are_exact_and_redacted(int hresult, string expected)
+    {
+        string diagnostic = StatePersistenceDiagnostic.Describe(
+            Path.Combine("private-runtime-detail", "router.state.json"),
+            StatePersistenceOperation.ReplaceFile,
+            new IOException("private-fault-detail", hresult));
+
+        Assert.EndsWith(expected + ".", diagnostic, StringComparison.Ordinal);
+        Assert.DoesNotContain("private", diagnostic, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class AlwaysSharingFileSystem(int failures, int hresult = unchecked((int)0x80070020)) : IFileSystem
     {
         private int _remaining = failures;
         public FakeFileSystem Inner { get; } = new();
+        public int ReplaceCalls { get; private set; }
 
         public void ReplaceFile(string sourcePath, string destinationPath)
         {
+            ReplaceCalls++;
             if (_remaining > 0)
             {
                 _remaining--;
-                throw new IOException("private-fault-detail", unchecked((int)0x80070020));
+                throw new IOException("private-fault-detail", hresult);
             }
 
             Inner.ReplaceFile(sourcePath, destinationPath);

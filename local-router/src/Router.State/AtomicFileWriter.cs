@@ -60,21 +60,31 @@ public sealed class AtomicFileWriter
     }
 
     // OSS-M4-2-HOTFIX2: delays before each retry of an atomic replace that failed
-    // with a Windows sharing violation (another process briefly held the target
-    // open without FileShare.Delete). Three retries, 175 ms in total.
+    // transiently. One budget for every retryable failure: three retries, 175 ms
+    // in total, shared by ERROR_SHARING_VIOLATION and ERROR_UNABLE_TO_REMOVE_REPLACED.
     private static readonly TimeSpan[] SharingViolationRetryDelays =
         [TimeSpan.FromMilliseconds(25), TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(100)];
 
     // ERROR_SHARING_VIOLATION (32) as the HRESULT File.Replace reports it.
     private const int SharingViolationHResult = unchecked((int)0x80070020);
 
+    // OSS-M4-2-HOTFIX2-FIX1: ERROR_UNABLE_TO_REMOVE_REPLACED (1175). ReplaceFile
+    // could not move the replaced file aside; Windows documents that the replaced
+    // and the replacement file then both keep their original names. The related
+    // 1176 and 1177 leave the replaced file missing or renamed and are never retried.
+    private const int UnableToRemoveReplacedHResult = unchecked((int)0x80070497);
+
     /// <summary>
     /// Replaces the target with the fully written temp file. Only an
-    /// <see cref="IOException"/> carrying exactly ERROR_SHARING_VIOLATION is
-    /// retried: on that failure File.Replace has changed neither file, so the
-    /// same replace is attempted again. Every other failure, and the last
-    /// sharing violation once the retries are exhausted, propagates unchanged.
-    /// The target is never deleted or written in place.
+    /// <see cref="IOException"/> carrying exactly ERROR_SHARING_VIOLATION or
+    /// ERROR_UNABLE_TO_REMOVE_REPLACED is retried, within one shared budget: on
+    /// those failures File.Replace has left both files under their names, so the
+    /// same replace is attempted again. A 1175 is retried only while the target
+    /// and the temp file are both still present; that presence check guards
+    /// against an undocumented outcome and is not a proof that either file is
+    /// unchanged. Every other failure, and the last retryable failure once the
+    /// budget is exhausted, propagates unchanged. The target is never deleted or
+    /// written in place.
     /// </summary>
     private static async Task ReplaceWithBoundedSharingRetryAsync(
         IFileSystem fileSystem,
@@ -89,13 +99,33 @@ public sealed class AtomicFileWriter
                 fileSystem.ReplaceFile(tempPath, targetPath);
                 return;
             }
-            catch (IOException error) when (error.HResult == SharingViolationHResult
-                && retry < SharingViolationRetryDelays.Length)
+            catch (IOException error) when (retry < SharingViolationRetryDelays.Length
+                && (error.HResult == SharingViolationHResult || error.HResult == UnableToRemoveReplacedHResult))
             {
+                if (error.HResult == UnableToRemoveReplacedHResult
+                    && !BothReplaceFilesPresent(fileSystem, tempPath, targetPath))
+                {
+                    throw;
+                }
+
                 cancellationToken.ThrowIfCancellationRequested();
                 await Task.Delay(SharingViolationRetryDelays[retry], cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
             }
+        }
+    }
+
+    // Any failure of the check itself counts as "not present": the original
+    // replace failure is then reported through the existing failure path.
+    private static bool BothReplaceFilesPresent(IFileSystem fileSystem, string tempPath, string targetPath)
+    {
+        try
+        {
+            return fileSystem.FileExists(targetPath) && fileSystem.FileExists(tempPath);
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 
