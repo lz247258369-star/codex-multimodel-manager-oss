@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using Router.ClientAdapters.Responses;
 using Router.Core.Tests.Fakes;
@@ -18,6 +19,9 @@ public sealed class Lr10DefaultPricingHostTests
     {
         int port = HostTestHarness.GetFreePort();
         string sandbox = TestPaths.NewSandboxDirectory();
+        using CancellationTokenSource cts = new();
+        Task<int>? runTask = null;
+        ExceptionDispatchInfo? failure = null;
         try
         {
             TestPathProvider pathProvider = new(sandbox);
@@ -32,10 +36,10 @@ public sealed class Lr10DefaultPricingHostTests
                 });
             HostObservabilityProbe probe = new();
 
-            using CancellationTokenSource cts = new();
-            Task<int> runTask = RouterHostBootstrap.RunAsync(
+            runTask = RouterHostBootstrap.RunAsync(
                 Array.Empty<string>(),
                 pathProvider,
+                clock: new PinnedTestClock(HostTestHarness.CanonicalPricingNow),
                 secretResolver: HostTestHarness.SecretResolver(),
                 responsesService: service,
                 observabilityProbe: probe,
@@ -49,6 +53,8 @@ public sealed class Lr10DefaultPricingHostTests
             Assert.NotNull(probe.Metering);
             Assert.NotNull(probe.Observer);
             Assert.NotNull(probe.Metering!.Pricing);
+            HostTestHarness.AssertPriceFreshAt(
+                probe.Metering.Pricing!, "chatgpt", "gpt-5.6-terra", HostTestHarness.CanonicalPricingNow);
 
             using HttpResponseMessage response = await PostAsync(client, port, "gpt-5.6-terra");
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -83,10 +89,14 @@ public sealed class Lr10DefaultPricingHostTests
             Assert.True(probe.Observer!.DrainCompleted, "Bounded completion queue must drain before host exit.");
             Assert.Single(probe.Metering.Store.Recent(20));
         }
-        finally
+        catch (Exception error)
         {
-            Directory.Delete(sandbox, recursive: true);
+            // Captured, never swallowed: FinishHostTestAsync rethrows it as the
+            // first reported failure after the Host is stopped.
+            failure = ExceptionDispatchInfo.Capture(error);
         }
+
+        await HostTestCleanup.FinishHostTestAsync(failure, cts, runTask, sandbox);
     }
 
     [Fact]
@@ -94,14 +104,16 @@ public sealed class Lr10DefaultPricingHostTests
     {
         int port = HostTestHarness.GetFreePort();
         string sandbox = TestPaths.NewSandboxDirectory();
+        using CancellationTokenSource cts = new();
+        Task<int>? runTask = null;
+        ExceptionDispatchInfo? failure = null;
         try
         {
             TestPathProvider pathProvider = new(sandbox);
             await HostTestHarness.WriteEnabledRouterDefaultsAsync(pathProvider, port);
 
             HostObservabilityProbe probe = new();
-            using CancellationTokenSource cts = new();
-            Task<int> runTask = RouterHostBootstrap.RunAsync(
+            runTask = RouterHostBootstrap.RunAsync(
                 Array.Empty<string>(),
                 pathProvider,
                 secretResolver: HostTestHarness.SecretResolver(),
@@ -133,10 +145,14 @@ public sealed class Lr10DefaultPricingHostTests
             int exitCode = await runTask.WaitAsync(TimeSpan.FromSeconds(15));
             Assert.Equal(0, exitCode);
         }
-        finally
+        catch (Exception error)
         {
-            Directory.Delete(sandbox, recursive: true);
+            // Captured, never swallowed: FinishHostTestAsync rethrows it as the
+            // first reported failure after the Host is stopped.
+            failure = ExceptionDispatchInfo.Capture(error);
         }
+
+        await HostTestCleanup.FinishHostTestAsync(failure, cts, runTask, sandbox);
     }
 
     private static FakeResponsesService CanonicalPricedService(CanonicalUsage usage)
@@ -147,7 +163,7 @@ public sealed class Lr10DefaultPricingHostTests
             {
                 Id = "resp_canonical_pricing",
                 ObjectType = "response",
-                CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                CreatedAt = HostTestHarness.CanonicalPricingNow.ToUnixTimeSeconds(),
                 Status = "completed",
                 Model = request.Model,
                 Usage = usage,

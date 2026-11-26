@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using Router.ClientAdapters.Responses;
 using Router.Core.Tests.Fakes;
@@ -18,6 +19,9 @@ public sealed class Lr10ShutdownDrainRaceTests
     {
         int port = HostTestHarness.GetFreePort();
         string sandbox = TestPaths.NewSandboxDirectory();
+        using CancellationTokenSource cts = new();
+        Task<int>? runTask = null;
+        ExceptionDispatchInfo? failure = null;
         try
         {
             TestPathProvider pathProvider = new(sandbox);
@@ -25,10 +29,10 @@ public sealed class Lr10ShutdownDrainRaceTests
 
             FakeResponsesService service = PricedService();
             HostObservabilityProbe probe = new();
-            using CancellationTokenSource cts = new();
-            Task<int> runTask = RouterHostBootstrap.RunAsync(
+            runTask = RouterHostBootstrap.RunAsync(
                 Array.Empty<string>(),
                 pathProvider,
+                clock: new PinnedTestClock(HostTestHarness.CanonicalPricingNow),
                 secretResolver: HostTestHarness.SecretResolver(),
                 responsesService: service,
                 observabilityProbe: probe,
@@ -40,6 +44,9 @@ public sealed class Lr10ShutdownDrainRaceTests
                 await HostTestHarness.WaitUntilReadyStateAsync(pathProvider, TimeSpan.FromSeconds(5)),
                 "Router did not persist the READY runtime state before the host was cancelled.");
             Assert.NotNull(probe.Metering);
+            Assert.NotNull(probe.Metering!.Pricing);
+            HostTestHarness.AssertPriceFreshAt(
+                probe.Metering.Pricing!, "chatgpt", "gpt-5.6-terra", HostTestHarness.CanonicalPricingNow);
 
             using HttpRequestMessage request = new(HttpMethod.Post, $"http://127.0.0.1:{port}/v1/responses")
             {
@@ -72,10 +79,14 @@ public sealed class Lr10ShutdownDrainRaceTests
                 await HostTestHarness.WaitForLogFileAsync(logDirectory, TimeSpan.FromSeconds(2)),
                 "Redacted request log was not drained before host exit.");
         }
-        finally
+        catch (Exception error)
         {
-            Directory.Delete(sandbox, recursive: true);
+            // Captured, never swallowed: FinishHostTestAsync rethrows it as the
+            // first reported failure after the Host is stopped.
+            failure = ExceptionDispatchInfo.Capture(error);
         }
+
+        await HostTestCleanup.FinishHostTestAsync(failure, cts, runTask, sandbox);
     }
 
     private static FakeResponsesService PricedService()
@@ -86,7 +97,7 @@ public sealed class Lr10ShutdownDrainRaceTests
             {
                 Id = "resp_shutdown_drain",
                 ObjectType = "response",
-                CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                CreatedAt = HostTestHarness.CanonicalPricingNow.ToUnixTimeSeconds(),
                 Status = "completed",
                 Model = request.Model,
                 Usage = new CanonicalUsage

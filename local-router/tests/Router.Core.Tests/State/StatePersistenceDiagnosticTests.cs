@@ -128,7 +128,11 @@ public sealed class StatePersistenceDiagnosticTests
 
         private void Fail(StatePersistenceOperation operation)
         {
-            if (!_failed && operation == failure)
+            // OSS-M4-2-HOTFIX2: a sharing violation on ReplaceFile is now retried a
+            // bounded number of times, so that fault stays active to exercise a real
+            // (exhausted) failure. Every other operation still fails once and is
+            // never retried.
+            if (operation == failure && (!_failed || operation == StatePersistenceOperation.ReplaceFile))
             {
                 _failed = true;
                 throw new IOException("private-fault-detail", unchecked((int)0x80070020));

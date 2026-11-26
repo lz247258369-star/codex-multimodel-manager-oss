@@ -159,23 +159,6 @@ public sealed class Lr10ProductionMeteringHostTests
         return pricing.Snapshot!;
     }
 
-    /// <summary>
-    /// Starts at a pinned instant and then advances with real elapsed time, so
-    /// Host timing behaves normally while dates stay deterministic.
-    /// </summary>
-    private sealed class PinnedTestClock : Router.Core.Abstractions.IClock
-    {
-        private readonly DateTimeOffset _start;
-        private readonly System.Diagnostics.Stopwatch _elapsed = System.Diagnostics.Stopwatch.StartNew();
-
-        public PinnedTestClock(DateTimeOffset start)
-        {
-            _start = start;
-        }
-
-        public DateTimeOffset UtcNow => _start + _elapsed.Elapsed;
-    }
-
     private static int GetFreePort()
     {
         TcpListener listener = new(IPAddress.Loopback, 0);

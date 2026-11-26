@@ -388,6 +388,109 @@ try {
     $uninstallContract = Get-Content -Raw -LiteralPath (Join-Path $RepositoryRoot 'installer/scripts/router-uninstall-safety.cs')
     Assert-True ($uninstallContract.Contains('IStoppedRouterLease') -and $uninstallContract.Contains('AcquireStopped')) 'K: the PR8 stopped-lease contract is still declared and untouched'
 
+    # --- 2b. Shared runtime-state reads (OSS-M4-2-HOTFIX2) --------------------
+    # The Host replaces router.state.json and router.pid.json with File.Replace
+    # while Start polls them. A read handle that does not grant FileShare.Delete
+    # makes that replace fail with ERROR_SHARING_VIOLATION (32), so the
+    # controller's reader must grant it and otherwise behave as the previous one.
+    $controllerAst = [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$null, [ref]$null)
+    $readerAsts = @{}
+    foreach ($definition in $controllerAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)) {
+        if ($definition.Name -in @('Open-SharedReadStream', 'Read-JsonFile')) { $readerAsts[$definition.Name] = $definition }
+    }
+    $getContentCalls = @($controllerAst.FindAll({ param($node)
+                $node -is [System.Management.Automation.Language.CommandAst] -and $node.GetCommandName() -eq 'Get-Content' }, $true))
+    Assert-True ($getContentCalls.Count -eq 0) 'R: the controller never reads a file through Get-Content'
+    Assert-True ($readerAsts.Count -eq 2) 'R: the controller defines Open-SharedReadStream and Read-JsonFile'
+    if ($readerAsts.Count -eq 2) {
+        $openText = $readerAsts['Open-SharedReadStream'].Extent.Text
+        $readText = $readerAsts['Read-JsonFile'].Extent.Text
+        Assert-True ($openText.Contains('[System.IO.FileAccess]::Read,') -and
+            $openText.Contains('[System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete')) 'R: runtime-state reads are read-only and share ReadWrite and Delete'
+        Assert-True ($readText.Contains('Open-SharedReadStream $Path') -and $readText.Contains('$reader.Dispose()') -and
+            $readText.Contains('$stream.Dispose()')) 'R: Read-JsonFile reads through the shared stream and disposes the reader and the stream'
+
+        $sharedReader = New-Module -Name 'hotfix2-controller-reader' -ScriptBlock ([scriptblock]::Create(
+                "`$ErrorActionPreference = 'Stop'`n$openText`n$readText`nExport-ModuleMember"))
+        $readerRoot = Join-Path $tempRoot 'hotfix2-reader'
+        $null = New-Item -ItemType Directory -Path $readerRoot
+
+        # A: an open controller read never blocks the Host's atomic replace.
+        $target = Join-Path $readerRoot 'router.state.json'
+        $replacement = Join-Path $readerRoot '.tmp-replacement'
+        [System.IO.File]::WriteAllText($target, '{"lifecycle":"READY"}')
+        [System.IO.File]::WriteAllText($replacement, '{"lifecycle":"STOPPED"}')
+        $held = & $sharedReader { param($Path) Open-SharedReadStream $Path } $target
+        $replaceError = $null
+        $heldText = $null
+        try {
+            try { [System.IO.File]::Replace($replacement, $target, [NullString]::Value) } catch { $replaceError = $_.Exception }
+            $heldReader = [System.IO.StreamReader]::new($held)
+            try { $heldText = $heldReader.ReadToEnd() } finally { $heldReader.Dispose() }
+        }
+        finally { $held.Dispose() }
+        Assert-True ($null -eq $replaceError) 'R-A: an atomic replace succeeds while a controller read is open'
+        Assert-True ($heldText -ceq '{"lifecycle":"READY"}') 'R-A: the open read still sees the complete previous content'
+        $afterReplace = & $sharedReader { param($Path) Read-JsonFile $Path } $target
+        Assert-True ([string]$afterReplace.lifecycle -ceq 'STOPPED') 'R-A: the next read sees the complete replacement'
+
+        # Control: the previous reader's Get-Content -Raw call keeps the file open
+        # without Delete sharing while it hands the content on, so the same
+        # replace issued during that read fails with native 32. Check A therefore
+        # detects the defect it guards against.
+        if ($IsWindows) {
+            [System.IO.File]::WriteAllText($replacement, '{"lifecycle":"READY"}')
+            $controlError = $null
+            Get-Content -Raw -LiteralPath $target | ForEach-Object {
+                try { [System.IO.File]::Replace($replacement, $target, [NullString]::Value) }
+                catch { $controlError = if ($_.Exception.InnerException) { $_.Exception.InnerException } else { $_.Exception } }
+            }
+            Assert-True ($null -ne $controlError -and $controlError.HResult -eq -2147024864) 'R-A: control - a replace during the previous Get-Content -Raw read fails with a sharing violation'
+            Assert-True ([System.IO.File]::ReadAllText($target) -ceq '{"lifecycle":"STOPPED"}') 'R-A: control - the blocked replace left the target unchanged'
+        }
+
+        # Equivalence: the shared reader returns exactly what the previous
+        # Get-Content -Raw reader returned for every input class.
+        $previousReader = New-Module -Name 'hotfix2-previous-reader' -ScriptBlock {
+            $ErrorActionPreference = 'Stop'
+            function Read-JsonFile {
+                param([string]$Path)
+                if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+                try { return (Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json) }
+                catch { return [pscustomobject]@{ __corrupt = $true } }
+            }
+            Export-ModuleMember
+        }
+        $utf8 = [System.Text.UTF8Encoding]::new($false)
+        $inputs = [ordered]@{
+            'valid'      = $utf8.GetBytes('{"lifecycle":"READY","version":3,"owner":{"pid":42,"ticks":638000000000000000}}')
+            'utf8-bom'   = [byte[]](@(0xEF, 0xBB, 0xBF) + $utf8.GetBytes('{"lifecycle":"STOPPED"}'))
+            'utf16-bom'  = [byte[]]([System.Text.Encoding]::Unicode.GetPreamble() + [System.Text.Encoding]::Unicode.GetBytes('{"lifecycle":"READY"}'))
+            'empty'      = [byte[]]@()
+            'whitespace' = $utf8.GetBytes("  `r`n`t ")
+            'invalid'    = $utf8.GetBytes('{"lifecycle":')
+            'non-json'   = $utf8.GetBytes('not json')
+            'unicode'    = $utf8.GetBytes("{`"label`":`"`u{72B6}`u{6001}-`u{E9}`"}")
+        }
+        $inputPaths = [ordered]@{}
+        foreach ($name in $inputs.Keys) {
+            $inputPaths[$name] = Join-Path $readerRoot "$name.json"
+            [System.IO.File]::WriteAllBytes($inputPaths[$name], $inputs[$name])
+        }
+        $inputPaths['missing'] = Join-Path $readerRoot 'missing.json'
+        $inputPaths['directory'] = (New-Item -ItemType Directory -Path (Join-Path $readerRoot 'directory.json')).FullName
+        foreach ($name in $inputPaths.Keys) {
+            $previous = & $previousReader { param($Path) Read-JsonFile $Path } $inputPaths[$name]
+            $current = & $sharedReader { param($Path) Read-JsonFile $Path } $inputPaths[$name]
+            $previousJson = ConvertTo-Json -InputObject $previous -Compress -Depth 8 -EscapeHandling EscapeNonAscii
+            $currentJson = ConvertTo-Json -InputObject $current -Compress -Depth 8 -EscapeHandling EscapeNonAscii
+            Assert-True ($previousJson -ceq $currentJson) "R-E: Read-JsonFile matches the previous reader for the '$name' input ($currentJson)"
+            if ($name -eq 'unicode') {
+                Assert-True ([string]$current.label -ceq "`u{72B6}`u{6001}-`u{E9}") 'R-E: non-ASCII UTF-8 content is decoded exactly'
+            }
+        }
+    }
+
     # --- 3. Refusals: no capability, no side effect, no killed process --------
     $case = New-CaseHome; Write-UserConfig $case $true
     $before = Get-CaseSnapshot $case

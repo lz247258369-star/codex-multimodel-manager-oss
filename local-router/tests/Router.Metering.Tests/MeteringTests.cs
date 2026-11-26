@@ -165,6 +165,29 @@ public sealed class MeteringTests
         Assert.True(estimate.Estimated);
     }
 
+    // Freshness boundary of the production rule (stale only when asOf is later
+    // than EffectiveAt + DefaultStaleAfter). The instants are derived from the
+    // fixture price's own EffectiveAt, never from the wall clock.
+    [Theory]
+    [InlineData(-TimeSpan.TicksPerDay, CostEstimateStatus.Complete)]
+    [InlineData(-1L, CostEstimateStatus.Complete)]
+    [InlineData(0L, CostEstimateStatus.Complete)]
+    [InlineData(1L, CostEstimateStatus.StalePrice)]
+    [InlineData(TimeSpan.TicksPerDay, CostEstimateStatus.StalePrice)]
+    public void Price_freshness_boundary_is_exactly_the_default_stale_window(long offsetTicks, CostEstimateStatus expected)
+    {
+        PricingSnapshot snapshot = Snapshot();
+        DateTimeOffset effective = snapshot.TryGet("mm_openrouter", "z-ai/glm-5.3")!.EffectiveAt!.Value;
+        DateTimeOffset asOf = effective + CostEstimator.DefaultStaleAfter + TimeSpan.FromTicks(offsetTicks);
+
+        CostEstimate estimate = CostEstimator.Estimate(Usage(1000, 500), snapshot, "mm_openrouter", "z-ai/glm-5.3", asOf);
+
+        Assert.Equal(TimeSpan.FromDays(90), CostEstimator.DefaultStaleAfter);
+        Assert.Equal(expected, estimate.Status);
+        Assert.Equal(effective, estimate.EffectiveAt);
+        Assert.Equal(0.005m, estimate.InputCost);
+    }
+
     [Fact]
     public void Currency_mismatch_fails_closed()
     {

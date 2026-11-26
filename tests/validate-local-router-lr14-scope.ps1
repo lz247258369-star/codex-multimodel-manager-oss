@@ -1125,6 +1125,131 @@ $script:RegisteredSlices = @(
             "tools/oss-workflow/tests/Test-OssWorkflowTools.ps1" = "# below is built and edited with LF, so the here-strings are normalised first."
         }
     }
+    # OSS-M4-2-HOTFIX1-PRICING-CLOCK: the canonical-pricing Host tests run on the shared pinned test
+    # clock and stop the Host in finally before deleting the sandbox. Test code only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX1-PRICING-CLOCK"
+        Base      = "8ec8ce9308f1522b3c942650475aa56e1d3ee3ee"
+        Tip       = "5165cfbc34cc46340e373e627cab43ca4eddcf0c"
+        Artifacts = @(
+            "local-router/tests/Router.Core.Tests/Host/HostTestHarness.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10DefaultPricingHostTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10ProductionMeteringHostTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/PinnedTestClock.cs")
+        Markers   = @{
+            "local-router/tests/Router.Core.Tests/Host/HostTestHarness.cs" = "public static async Task StopHostAsync(CancellationTokenSource cts, Task<int>? runTask)"
+            "local-router/tests/Router.Core.Tests/Host/Lr10DefaultPricingHostTests.cs" = "clock: new PinnedTestClock(HostTestHarness.CanonicalPricingNow),"
+            "local-router/tests/Router.Core.Tests/Host/Lr10ProductionMeteringHostTests.cs" = "clock: new PinnedTestClock(PinnedNow),"
+            "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs" = "await HostTestHarness.StopHostAsync(cts, runTask);"
+            "local-router/tests/Router.Core.Tests/Host/PinnedTestClock.cs" = "internal sealed class PinnedTestClock : Router.Core.Abstractions.IClock"
+        }
+    }
+    # OSS-M4-2-HOTFIX1-FRESHNESS-BOUNDARY: a CostEstimator theory pins the 90-day price freshness
+    # boundary (-1 day, -1 tick, exactly 90 days, +1 tick, +1 day). Test code only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX1-FRESHNESS-BOUNDARY"
+        Base      = "af0ad76ae9576b6ba2972cd240389fd493d946b3"
+        Tip       = "c20c7ed9e860df601fdc488f702ea58e9f8955cc"
+        Artifacts = @(
+            "local-router/tests/Router.Metering.Tests/MeteringTests.cs")
+        Markers   = @{
+            "local-router/tests/Router.Metering.Tests/MeteringTests.cs" = "public void Price_freshness_boundary_is_exactly_the_default_stale_window(long offsetTicks, CostEstimateStatus expected)"
+        }
+    }
+    # OSS-M4-2-HOTFIX1-FIX1-HOST-CLEANUP: Host test cleanup reports stop timeouts and Host faults, keeps
+    # the sandbox while the Host may still run, and preserves the original test failure. Test code only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX1-FIX1-HOST-CLEANUP"
+        Base      = "2ba882e9f2f2e8d59d6a8bdc578496f276b45b11"
+        Tip       = "def35698bc7ca60f72ef166666ab583c2ebb8873"
+        Artifacts = @(
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanup.cs",
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanupTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/HostTestHarness.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10DefaultPricingHostTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs")
+        Markers   = @{
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanup.cs" = "public static async Task FinishHostTestAsync("
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanupTests.cs" = "public async Task Host_that_does_not_end_keeps_its_sandbox_and_reports_the_stop_timeout()"
+            "local-router/tests/Router.Core.Tests/Host/HostTestHarness.cs" = "public static void AssertPriceFreshAt(PricingSnapshot pricing, string providerId, string modelId, DateTimeOffset now)"
+            "local-router/tests/Router.Core.Tests/Host/Lr10DefaultPricingHostTests.cs" = "using System.Runtime.ExceptionServices;"
+            "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs" = "await HostTestCleanup.FinishHostTestAsync(failure, cts, runTask, sandbox);"
+        }
+    }
+    # OSS-M4-2-HOTFIX1-PRICING-CLOCK-REAUTH: re-authorizes the unchanged 8ec8ce9..5165cfb range with markers
+    # that still exist after OSS-M4-2-HOTFIX1-FIX1 replaced StopHostAsync (two earlier markers quoted it). Test code only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX1-PRICING-CLOCK-REAUTH"
+        Base      = "8ec8ce9308f1522b3c942650475aa56e1d3ee3ee"
+        Tip       = "5165cfbc34cc46340e373e627cab43ca4eddcf0c"
+        Artifacts = @(
+            "local-router/tests/Router.Core.Tests/Host/HostTestHarness.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10DefaultPricingHostTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10ProductionMeteringHostTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs",
+            "local-router/tests/Router.Core.Tests/Host/PinnedTestClock.cs")
+        Markers   = @{
+            "local-router/tests/Router.Core.Tests/Host/HostTestHarness.cs" = "public static readonly DateTimeOffset CanonicalPricingNow = new(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);"
+            "local-router/tests/Router.Core.Tests/Host/Lr10DefaultPricingHostTests.cs" = "clock: new PinnedTestClock(HostTestHarness.CanonicalPricingNow),"
+            "local-router/tests/Router.Core.Tests/Host/Lr10ProductionMeteringHostTests.cs" = "clock: new PinnedTestClock(PinnedNow),"
+            "local-router/tests/Router.Core.Tests/Host/Lr10ShutdownDrainRaceTests.cs" = "clock: new PinnedTestClock(HostTestHarness.CanonicalPricingNow),"
+            "local-router/tests/Router.Core.Tests/Host/PinnedTestClock.cs" = "internal sealed class PinnedTestClock : Router.Core.Abstractions.IClock"
+        }
+    }
+    # OSS-M4-2-HOTFIX1-FIX1-STOP-OUTCOMES: non-zero exit codes, unrelated cancellations and failing stop requests
+    # are reported by the Host test cleanup without replacing the original failure. Test code only.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX1-FIX1-STOP-OUTCOMES"
+        Base      = "e50a40d657cb9281e6307d693414ac0119644fd1"
+        Tip       = "6a1049a528125008f75e1623012bc36aaa4d56d2"
+        Artifacts = @(
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanup.cs",
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanupTests.cs")
+        Markers   = @{
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanup.cs" = "private static async Task<HostStopResult> ObserveHostEndAsync("
+            "local-router/tests/Router.Core.Tests/Host/HostTestCleanupTests.cs" = "public async Task Cancellation_that_is_not_the_requested_stop_is_a_fault()"
+        }
+    }
+    # OSS-M4-2-HOTFIX2-RUNTIME-STATE-REPLACE-RACE: the lifecycle controller reads runtime state through a stream
+    # sharing ReadWrite and Delete, and the atomic writer retries ReplaceFile at most 3 times (25/50/100 ms)
+    # only for an exact sharing violation; every other failure and an exhausted conflict fail as before.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX2-RUNTIME-STATE-REPLACE-RACE"
+        Base      = "4f289a962488c1a417d3c4ad087917104e0b6154"
+        Tip       = "b5e0f37f34fff25bd183ba699c78322eb19f82f7"
+        Artifacts = @(
+            "installer/scripts/router-lifecycle.ps1",
+            "local-router/src/Router.State/AtomicFileWriter.cs",
+            "local-router/tests/Router.Core.Tests/State/AtomicFileWriterSharingRetryTests.cs",
+            "local-router/tests/Router.Core.Tests/State/StatePersistenceDiagnosticTests.cs",
+            "tests/fixtures/local-router/startup-gate/StartupGateProbe.cs",
+            "tests/validate-router-host-lifecycle.ps1")
+        Markers   = @{
+            "installer/scripts/router-lifecycle.ps1" = "function Open-SharedReadStream {"
+            "local-router/src/Router.State/AtomicFileWriter.cs" = "private static async Task ReplaceWithBoundedSharingRetryAsync("
+            "local-router/tests/Router.Core.Tests/State/AtomicFileWriterSharingRetryTests.cs" = "public sealed class AtomicFileWriterSharingRetryTests"
+            "local-router/tests/Router.Core.Tests/State/StatePersistenceDiagnosticTests.cs" = "(!_failed || operation == StatePersistenceOperation.ReplaceFile)"
+            "tests/fixtures/local-router/startup-gate/StartupGateProbe.cs" = "stoppedFailure.FailureCount == 4"
+            "tests/validate-router-host-lifecycle.ps1" = "# --- 2b. Shared runtime-state reads (OSS-M4-2-HOTFIX2)"
+        }
+    }
+    # OSS-M4-2-HOTFIX2-FIX1-UNABLE-TO-REMOVE-REPLACED: the atomic writer also retries ReplaceFile for exactly
+    # ERROR_UNABLE_TO_REMOVE_REPLACED (1175) within the same budget, only while target and temp both exist; 1176/1177 never.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX2-FIX1-UNABLE-TO-REMOVE-REPLACED"
+        Base      = "9836f0ba263fe8a0749879cc2d85a29c717074c8"
+        Tip       = "7c08385261ccc6b79ee794e19363bf6c429d6707"
+        Artifacts = @(
+            "local-router/src/Router.State/AtomicFileWriter.cs",
+            "local-router/src/Router.State/StatePersistenceDiagnostic.cs",
+            "local-router/tests/Router.Core.Tests/State/AtomicFileWriterSharingRetryTests.cs")
+        Markers   = @{
+            "local-router/src/Router.State/AtomicFileWriter.cs" = "private const int UnableToRemoveReplacedHResult = unchecked((int)0x80070497);"
+            "local-router/src/Router.State/StatePersistenceDiagnostic.cs" = "1175 => `"unable_to_remove_replaced`","
+            "local-router/tests/Router.Core.Tests/State/AtomicFileWriterSharingRetryTests.cs" = "public async Task Unable_to_remove_replaced_with_the_temp_gone_is_not_retried_and_keeps_the_previous_file()"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
