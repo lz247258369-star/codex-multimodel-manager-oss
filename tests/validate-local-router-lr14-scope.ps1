@@ -1234,6 +1234,22 @@ $script:RegisteredSlices = @(
             "tests/validate-router-host-lifecycle.ps1" = "# --- 2b. Shared runtime-state reads (OSS-M4-2-HOTFIX2)"
         }
     }
+    # OSS-M4-2-HOTFIX2-FIX1-UNABLE-TO-REMOVE-REPLACED: the atomic writer also retries ReplaceFile for exactly
+    # ERROR_UNABLE_TO_REMOVE_REPLACED (1175) within the same budget, only while target and temp both exist; 1176/1177 never.
+    [pscustomobject]@{
+        Name      = "OSS-M4-2-HOTFIX2-FIX1-UNABLE-TO-REMOVE-REPLACED"
+        Base      = "9836f0ba263fe8a0749879cc2d85a29c717074c8"
+        Tip       = "7c08385261ccc6b79ee794e19363bf6c429d6707"
+        Artifacts = @(
+            "local-router/src/Router.State/AtomicFileWriter.cs",
+            "local-router/src/Router.State/StatePersistenceDiagnostic.cs",
+            "local-router/tests/Router.Core.Tests/State/AtomicFileWriterSharingRetryTests.cs")
+        Markers   = @{
+            "local-router/src/Router.State/AtomicFileWriter.cs" = "private const int UnableToRemoveReplacedHResult = unchecked((int)0x80070497);"
+            "local-router/src/Router.State/StatePersistenceDiagnostic.cs" = "1175 => `"unable_to_remove_replaced`","
+            "local-router/tests/Router.Core.Tests/State/AtomicFileWriterSharingRetryTests.cs" = "public async Task Unable_to_remove_replaced_with_the_temp_gone_is_not_retried_and_keeps_the_previous_file()"
+        }
+    }
 )
 
 $lr14SliceCommits = if ($script:OssGenesisMode) { @() } elseif ($script:SliceIdentityKnown) { @(Get-GitLines @("rev-list", "$($script:Lr14SliceBase)..$($script:Lr14SliceCommit)")) } else { @() }
