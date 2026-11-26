@@ -87,10 +87,34 @@ function Write-LifecycleResult {
     }
 }
 
+# OSS-M4-2-HOTFIX2: the Host replaces router.state.json and router.pid.json
+# atomically (File.Replace) while Start polls them. A reader that does not grant
+# FileShare.Delete makes that replace fail with a sharing violation, so the Host
+# could not persist STOPPED. This handle is read-only; the extra sharing only
+# lets a concurrent atomic replace complete, and the open handle keeps reading
+# the complete previous file. Identity, ACL and control-channel checks are made
+# on the parsed content by the callers and are unchanged.
+function Open-SharedReadStream {
+    param([string]$Path)
+    return [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read,
+        ([System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete))
+}
+
 function Read-JsonFile {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
-    try { return (Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json) }
+    try {
+        $stream = Open-SharedReadStream $Path
+        try {
+            # UTF-8 by default with byte-order-mark detection, as Get-Content -Raw.
+            $reader = [System.IO.StreamReader]::new($stream, [System.Text.UTF8Encoding]::new($false), $true)
+            try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+        }
+        finally { $stream.Dispose() }
+        # Get-Content -Raw emits nothing for an empty file, so the result was $null.
+        if ($text.Length -eq 0) { return $null }
+        return ($text | ConvertFrom-Json)
+    }
     catch { return [pscustomobject]@{ __corrupt = $true } }
 }
 

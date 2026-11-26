@@ -272,7 +272,10 @@ internal static class StartupGateProbe
                 if (paths.OwnerReads != 1) { return 28; }
                 if (stoppedFailure is not null)
                 {
-                    bool valid = code == RouterHostBootstrap.ConfigErrorExitCode && stoppedFailure.FailureCount == 1
+                    // OSS-M4-2-HOTFIX2: the injected conflict is persistent, so the
+                    // writer makes exactly its bounded attempts (first + 3 retries)
+                    // and still reports the real failure.
+                    bool valid = code == RouterHostBootstrap.ConfigErrorExitCode && stoppedFailure.FailureCount == 4
                         && originalOwner is not null && originalReady is not null && originalArchives is not null
                         && originalOwnerHash is not null && originalReadyHash is not null
                         && File.Exists(Path.Combine(root, "runtime", "router.pid.json"))

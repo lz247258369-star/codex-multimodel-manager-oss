@@ -36,7 +36,7 @@ public sealed class AtomicFileWriter
             if (fileSystem.FileExists(targetPath))
             {
                 operation = StatePersistenceOperation.ReplaceFile;
-                fileSystem.ReplaceFile(tempPath, targetPath);
+                await ReplaceWithBoundedSharingRetryAsync(fileSystem, tempPath, targetPath, cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -56,6 +56,46 @@ public sealed class AtomicFileWriter
             StatePersistenceDiagnostic.Report(targetPath, operation, error);
             TryDeleteTemp(fileSystem, tempPath);
             return StateErrors.StateWriteFailed(Path.GetFileName(targetPath));
+        }
+    }
+
+    // OSS-M4-2-HOTFIX2: delays before each retry of an atomic replace that failed
+    // with a Windows sharing violation (another process briefly held the target
+    // open without FileShare.Delete). Three retries, 175 ms in total.
+    private static readonly TimeSpan[] SharingViolationRetryDelays =
+        [TimeSpan.FromMilliseconds(25), TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(100)];
+
+    // ERROR_SHARING_VIOLATION (32) as the HRESULT File.Replace reports it.
+    private const int SharingViolationHResult = unchecked((int)0x80070020);
+
+    /// <summary>
+    /// Replaces the target with the fully written temp file. Only an
+    /// <see cref="IOException"/> carrying exactly ERROR_SHARING_VIOLATION is
+    /// retried: on that failure File.Replace has changed neither file, so the
+    /// same replace is attempted again. Every other failure, and the last
+    /// sharing violation once the retries are exhausted, propagates unchanged.
+    /// The target is never deleted or written in place.
+    /// </summary>
+    private static async Task ReplaceWithBoundedSharingRetryAsync(
+        IFileSystem fileSystem,
+        string tempPath,
+        string targetPath,
+        CancellationToken cancellationToken)
+    {
+        for (int retry = 0; ; retry++)
+        {
+            try
+            {
+                fileSystem.ReplaceFile(tempPath, targetPath);
+                return;
+            }
+            catch (IOException error) when (error.HResult == SharingViolationHResult
+                && retry < SharingViolationRetryDelays.Length)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Delay(SharingViolationRetryDelays[retry], cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
         }
     }
 
