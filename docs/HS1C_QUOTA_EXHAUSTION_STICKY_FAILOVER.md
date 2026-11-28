@@ -1,6 +1,6 @@
 # HS-1C — Quota-Exhaustion Sticky Failover (Router third-party providers)
 
-Status: **DRAFT PR on the current `main` baseline — CI and independent review required before merge.**
+Status: **in `main`, default off.** It was merged in the private development repository (PR #108, installer configuration in PR #110) before the open-source snapshot, and arrived here with the genesis import. Only fake providers have verified it. The current state is tracked in `docs/PROJECT_STATUS.md`.
 
 Base: `main` (HS-1B thread-scoped model selection slice 1, merged via PR #89). Ported from Draft PR #88 (`feat/hs1c-quota-exhaustion-sticky-failover`, whose base was the HS-1B branch); #88 itself is left unchanged.
 
